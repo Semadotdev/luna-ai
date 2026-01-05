@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luna | Intelligence That Shines</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="toast"><i data-lucide="sparkles" size="18"></i> <span id="toast-text"></span></div>
+    
+    <div id="sidebar-backdrop" onclick="toggleSidebarMenu()"></div>
+
+    <div id="modal-overlay">
+        <div class="modal">
+            <h3 id="modal-title">Confirm Action</h3>
+            <div id="modal-content-area">
+                <p id="modal-desc" style="margin-top: 10px; font-size: 14px; color: var(--text-muted);"></p>
+            </div>
+            <div class="modal-btns">
+                <button class="modal-btn" style="background:var(--border); color:var(--text-main)" onclick="closeModal()">Cancel</button>
+                <button id="modal-confirm-btn" class="modal-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="login-page" class="auth-page">
+        <div class="auth-card">
+            <i data-lucide="moon" size="64" color="var(--primary)" fill="var(--primary)"></i>
+            <h1>Luna</h1>
+            <p class="auth-tagline">Intelligence That Shines.</p>
+            <input type="email" id="in-email" class="auth-input" placeholder="Email Address">
+            <input type="password" id="in-password" class="auth-input" placeholder="Password">
+            <button class="btn-luna" onclick="handleSignIn()">Enter the Moonlight</button>
+            <button onclick="toggleAuth(true)" class="auth-switch">New here? <span>Join Luna</span></button>
+        </div>
+    </div>
+    
+    <div id="signup-page" class="auth-page hidden">
+        <div class="auth-card">
+            <i data-lucide="sparkles" size="64" color="var(--primary)" fill="var(--primary)"></i>
+            <h1>Join Luna</h1>
+            <p class="auth-tagline">Create your celestial ID.</p>
+            <input type="email" id="up-email" class="auth-input" placeholder="Email Address">
+            <input type="password" id="up-pass" class="auth-input" placeholder="Create Password">
+            <button class="btn-luna" onclick="handleSignUp()">Start Journey</button>
+            <button onclick="toggleAuth(false)" class="auth-switch">Already a member? <span>Login</span></button>
+        </div>
+    </div>
+    
+    <div id="sidebar" class="hidden">
+        <div class="sidebar-header">
+            <div class="logo">
+                <i data-lucide="moon" fill="var(--primary)" color="var(--primary)"></i> Luna
+            </div>
+            <button class="close-sidebar-btn" onclick="toggleSidebarMenu()">
+                <i data-lucide="x" size="24"></i>
+            </button>
+        </div>
+        <button class="new-chat-btn" onclick="startNewSession(); closeSidebarOnMobile();">+ NEW SESSION</button>
+        <div id="history-list"></div>
+        
+        <div class="sidebar-footer">
+            <button onclick="openKeyModal()" class="footer-btn">
+                <i data-lucide="key"></i> <span id="key-label">API Settings</span>
+            </button>
+            <button onclick="toggleTheme()" class="footer-btn">
+                <i data-lucide="sun"></i> <span>Theme Mode</span>
+            </button>
+            <button onclick="confirmSignOut()" class="footer-btn danger">
+                <i data-lucide="log-out"></i> Sign Out
+            </button>
+        </div>
+    </div>
+
+    <div id="main" class="hidden">
+        <div id="mobile-nav">
+            <button onclick="toggleSidebarMenu()"><i data-lucide="menu" size="24"></i></button>
+            <span>LUNA</span>
+            <button onclick="startNewSession()"><i data-lucide="plus" size="24"></i></button>
+        </div>
+
+        <div id="messages"></div>
+        <div id="input-area">
+            <div id="typing-container" class="hidden">
+                <div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+            </div>
+            <div class="input-wrapper">
+                <input type="text" id="userInput" placeholder="Illuminate a thought..." onkeypress="if(event.key==='Enter') chat()">
+                <button onclick="chat()">
+                    <i data-lucide="arrow-up-circle" size="36" fill="currentColor"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
