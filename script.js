@@ -1,144 +1,137 @@
-// --- CONFIG ---
 const SB_URL = "https://odxdyzvrijcpqegxvjtl.supabase.co";
 const SB_KEY = "sb_publishable_V3PL1gDtOfMoiO6tOWKcWw_7I2IB2x7";
 const sb = supabase.createClient(SB_URL, SB_KEY);
 
-let user = null;
-let currentChatId = crypto.randomUUID();
-let isFirstMessage = true;
-let lastUserMessage = "";
+let user = null, currentChatId = crypto.randomUUID(), isFirstMessage = true, lastUserMessage = "";
 
-// --- SECURITY: Hiding Credentials via LocalStorage ---
-function getGroqKey() {
-    return localStorage.getItem('LUNA_KEY');
+// --- BYOK SECURITY LOGIC ---
+function getStoreKey() { return `LUNA_GROQ_KEY_${user.id}`; }
+function getStoredApiKey() { return localStorage.getItem(getStoreKey()); }
+
+// Logic to update the Status Badge
+function updateKeyStatusBadge() {
+    const key = getStoredApiKey();
+    const dot = document.getElementById('status-dot');
+    const text = document.getElementById('status-text');
+    
+    if (key && key.startsWith('gsk_')) {
+        dot.style.background = "var(--success)";
+        text.style.color = "var(--success)";
+        text.innerText = "Active";
+    } else {
+        dot.style.background = "var(--danger)";
+        text.style.color = "var(--danger)";
+        text.innerText = "Missing";
+    }
 }
 
 function openKeyModal() {
-    const currentKey = getGroqKey() || "";
-    openModal("API Settings", "Enter your Groq API Key (gsk_...). It is saved locally on this browser only.", "Save Key", "var(--primary)", () => {
-        const key = document.getElementById('key-input').value.trim();
-        if(key.startsWith('gsk_')) {
-            localStorage.setItem('LUNA_KEY', key);
-            notify("Key secured successfully!");
+    const currentKey = getStoredApiKey() || "";
+    openModal("API Settings", "Enter your Groq API Key to power Luna.", "Save Key", "var(--primary)", () => {
+        const newKey = document.getElementById('api-key-input').value.trim();
+        if(newKey.startsWith("gsk_")) {
+            localStorage.setItem(getStoreKey(), newKey);
+            updateKeyStatusBadge(); // Update badge UI
+            notify("Key saved successfully!");
         } else {
-            notify("Invalid key format.");
+            notify("Invalid Groq key format.");
         }
     });
-    // Inject input into modal
-    document.getElementById('modal-desc').innerHTML += `
-        <input type="password" id="key-input" class="auth-input" style="margin-top:15px" placeholder="gsk_..." value="${currentKey}">
+    document.getElementById('modal-desc').innerHTML = `
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:15px">Your key is stored locally on this device only.</p>
+        <input type="password" id="api-key-input" class="auth-input" placeholder="gsk_..." value="${currentKey}">
     `;
 }
 
-// --- UI HELPERS ---
+// --- RESPONSIVE & UI ---
+function toggleSidebarMenu() { document.getElementById('sidebar').classList.toggle('open'); }
+function closeSidebarOnMobile() { document.getElementById('sidebar').classList.remove('open'); }
 function notify(msg) {
     const t = document.getElementById('toast');
     document.getElementById('toast-text').innerText = msg;
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 3000);
 }
-
 function toggleAuth(signUp) {
     document.getElementById('login-page').classList.toggle('hidden', signUp);
     document.getElementById('signup-page').classList.toggle('hidden', !signUp);
 }
-
 function openModal(title, desc, confirmBtnText, color, onConfirm) {
-    const overlay = document.getElementById('modal-overlay');
-    const btn = document.getElementById('modal-confirm-btn');
     document.getElementById('modal-title').innerText = title;
-    document.getElementById('modal-desc').innerText = desc;
-    btn.innerText = confirmBtnText;
-    btn.style.background = color; btn.style.color = "white";
+    document.getElementById('modal-desc').innerHTML = desc;
+    const btn = document.getElementById('modal-confirm-btn');
+    btn.innerText = confirmBtnText; btn.style.background = color;
     btn.onclick = () => { onConfirm(); closeModal(); };
-    overlay.style.display = 'flex';
+    document.getElementById('modal-overlay').style.display = 'flex';
 }
-
 function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
-function toggleSidebarMenu() { document.getElementById('sidebar').classList.toggle('open'); }
-function closeSidebarOnMobile() { document.getElementById('sidebar').classList.remove('open'); }
 
 // --- AUTH ---
 async function handleSignUp() {
     const { error } = await sb.auth.signUp({ email: v('up-email'), password: v('up-pass') });
-    if(error) notify(error.message); else notify("Check your email!");
+    if(error) notify(error.message); else notify("Account Successfully Created.");
 }
-
 async function handleSignIn() {
     const { data, error } = await sb.auth.signInWithPassword({ email: v('in-email'), password: v('in-password') });
-    if(error) notify("Invalid Credentials"); else initApp(data.user);
+    if(error) notify("Invalid Credentials."); else initApp(data.user);
 }
-
 function initApp(u) {
     user = u;
     document.querySelectorAll('.auth-page').forEach(p => p.classList.add('hidden'));
     document.getElementById('sidebar').classList.remove('hidden');
     document.getElementById('main').classList.remove('hidden');
+    updateKeyStatusBadge(); // Initialize badge on login
     lucide.createIcons();
     refreshHistory();
-    renderMsg("I am **Luna**, intelligence that shines. How can I brighten your quest today?", 'bot');
+    renderMsg("I am **Luna**, intelligence that shines.", 'bot');
 }
-
 function confirmSignOut() {
     openModal("Sign Out?", "End your lunar session?", "Sign Out", "var(--danger)", () => {
         sb.auth.signOut(); window.location.reload();
     });
 }
 
-// --- CORE CHAT LOGIC ---
+// --- CORE CHAT ---
 async function chat(isRegenerating = false) {
-    const key = getGroqKey();
-    if(!key) { notify("API Key Required"); openKeyModal(); return; }
+    const apiKey = getStoredApiKey();
+    if(!apiKey) { openKeyModal(); return; }
 
     const input = document.getElementById('userInput');
     const text = isRegenerating ? lastUserMessage : input.value;
     if(!text) return;
+
     if(!isRegenerating) { lastUserMessage = text; renderMsg(text, 'user'); input.value = ''; }
     
-    document.getElementById('typing-container').classList.remove('hidden');
-
-    // Secret Response
-    if (text.toLowerCase().trim() === "luis loves who?") {
-        setTimeout(async () => {
-            const secret = "His Luna - TINETINE!";
-            document.getElementById('typing-container').classList.add('hidden');
-            renderMsg(secret, 'bot');
-            await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: secret, sender: 'bot' }]);
-            refreshHistory();
-        }, 800);
-        return;
-    }
-
-    if (isFirstMessage && !isRegenerating) generateChatTitle(text);
+    if (isFirstMessage && !isRegenerating) generateChatTitle(text, apiKey);
 
     try {
         const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
-            headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+            headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: "llama-3.3-70b-versatile",
-                messages: [{ role: "system", content: "You are Luna. Use Markdown for every response." }, { role: "user", content: text }]
+                messages: [{ role: "system", content: "You are Luna. Use Markdown." }, { role: "user", content: text }]
             })
         });
         const data = await res.json();
+        if(data.error) throw new Error(data.error.message);
+        
         const botRes = data.choices[0].message.content;
-        document.getElementById('typing-container').classList.add('hidden');
         renderMsg(botRes, 'bot');
         await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: botRes, sender: 'bot' }]);
         refreshHistory();
     } catch(e) { 
-        document.getElementById('typing-container').classList.add('hidden');
-        notify("Check API Key or Connection."); 
+        notify("API Error: " + e.message);
+        if(e.message.includes("API key")) openKeyModal();
     }
 }
 
-async function generateChatTitle(userPrompt) {
+async function generateChatTitle(userPrompt, apiKey) {
     isFirstMessage = false;
-    const key = getGroqKey();
     try {
         const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
-            headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+            headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: "llama-3.3-70b-versatile",
                 messages: [{ role: "system", content: "Summarize into 3 words. No quotes." }, { role: "user", content: userPrompt }]
@@ -208,4 +201,6 @@ function startNewSession() {
 
 function toggleTheme() { document.body.classList.toggle('light-mode'); lucide.createIcons(); }
 function v(id) { return document.getElementById(id).value; }
+
+// Initialize Lucide icons on load
 lucide.createIcons();
