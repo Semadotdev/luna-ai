@@ -31,6 +31,13 @@ body { background: var(--bg-main); color: var(--text-main); display: flex; heigh
     backdrop-filter: blur(4px);
 }
 
+.history-item span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
 #sidebar-backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,0.5);
     display: none; z-index: 1500; backdrop-filter: blur(2px);
@@ -121,4 +128,5 @@ input { flex: 1; border: none; background: transparent; color: var(--text-main);
     #sidebar.open { transform: translateX(0); }
     #sidebar.open ~ #sidebar-backdrop { display: block; }
     #messages, #input-area { padding-left: 20px; padding-right: 20px; }
+
 }
