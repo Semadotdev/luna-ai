@@ -4,6 +4,19 @@ const sb = supabase.createClient(SB_URL, SB_KEY);
 
 let user = null, currentChatId = crypto.randomUUID(), isFirstMessage = true, lastUserMessage = "";
 
+// --- PASSWORD TOGGLE LOGIC ---
+function togglePasswordVisibility(inputId, iconEl) {
+    const input = document.getElementById(inputId);
+    if (input.type === "password") {
+        input.type = "text";
+        iconEl.setAttribute("data-lucide", "eye-off");
+    } else {
+        input.type = "password";
+        iconEl.setAttribute("data-lucide", "eye");
+    }
+    lucide.createIcons();
+}
+
 // --- BYOK SECURITY LOGIC ---
 function getStoreKey() { return `LUNA_GROQ_KEY_${user.id}`; }
 function getStoredApiKey() { return localStorage.getItem(getStoreKey()); }
@@ -25,12 +38,12 @@ function updateKeyStatusBadge() {
 
 function openKeyModal() {
     const currentKey = getStoredApiKey() || "";
-    openModal("API Settings", "Enter your Groq API Key to power Luna.", "Save Key", "var(--primary)", () => {
+    openModal("Celestial Connection", "Enter your Groq API Key to synchronize with Luna.", "Save Key", "var(--primary)", () => {
         const newKey = document.getElementById('api-key-input').value.trim();
         if(newKey.startsWith("gsk_")) {
             localStorage.setItem(getStoreKey(), newKey);
             updateKeyStatusBadge(); 
-            notify("Key saved successfully!");
+            notify("Core synchronized successfully.");
         } else {
             notify("Invalid Groq key format.");
         }
@@ -67,7 +80,7 @@ function closeModal() { document.getElementById('modal-overlay').style.display =
 // --- AUTH ---
 async function handleSignUp() {
     const { error } = await sb.auth.signUp({ email: v('up-email'), password: v('up-pass') });
-    if(error) notify(error.message); else notify("Account Successfully Created.");
+    if(error) notify(error.message); else notify("Account Created. Welcome to the cosmos.");
 }
 async function handleSignIn() {
     const { data, error } = await sb.auth.signInWithPassword({ email: v('in-email'), password: v('in-password') });
@@ -81,15 +94,15 @@ function initApp(u) {
     updateKeyStatusBadge(); 
     lucide.createIcons();
     refreshHistory();
-    renderMsg("I am **Luna**, intelligence that shines.", 'bot');
+    renderMsg("The stars have aligned. I am **Luna**, an intelligence that shines. How shall we illuminate the void today?", 'bot');
 }
 function confirmSignOut() {
-    openModal("Sign Out?", "End your lunar session?", "Sign Out", "var(--danger)", () => {
+    openModal("Depart", "Shall we drift back into the silence of the stars?", "Sign Out", "var(--danger)", () => {
         sb.auth.signOut(); window.location.reload();
     });
 }
 
-// --- CORE CHAT LOGIC ---
+// --- CORE CHAT LOGIC (MULTI-TURN & CONCISE) ---
 async function chat(isRegenerating = false) {
     const apiKey = getStoredApiKey();
     if(!apiKey) { openKeyModal(); return; }
@@ -103,7 +116,6 @@ async function chat(isRegenerating = false) {
         renderMsg(text, 'user'); 
         input.value = ''; 
         
-        // SAVE USER MESSAGE TO DB (Fixes history disappearing)
         await sb.from('chat_history').insert([{ 
             user_id: user.id, 
             chat_id: currentChatId, 
@@ -114,30 +126,46 @@ async function chat(isRegenerating = false) {
     
     if (isFirstMessage && !isRegenerating) generateChatTitle(text, apiKey);
 
-    // CUSTOM LOGIC: LUIS RESPONSE
     const lowerText = text.toLowerCase().trim();
     if (lowerText.includes("luis loves who")) {
         const customRes = "His Luna - TINETINE!";
         renderMsg(customRes, 'bot');
-        await sb.from('chat_history').insert([{ 
-            user_id: user.id, 
-            chat_id: currentChatId, 
-            message: customRes, 
-            sender: 'bot' 
-        }]);
+        await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: customRes, sender: 'bot' }]);
         refreshHistory();
         return; 
     }
 
     try {
+        const { data: history } = await sb.from('chat_history')
+            .select('sender, message')
+            .eq('chat_id', currentChatId)
+            .order('created_at', { ascending: true });
+
+        const messageHistory = history.map(m => ({
+            role: m.sender === 'bot' ? 'assistant' : 'user',
+            content: m.message
+        }));
+
         const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: "llama-3.3-70b-versatile",
-                messages: [{ role: "system", content: "You are Luna. Use Markdown." }, { role: "user", content: text }]
+                messages: [
+                    { 
+                        role: "system", 
+                        content: `You are Luna, a celestial intelligence. Your tone is serene, professional, and luminous.
+                        
+                        RULES:
+                        1. DEPTH: For complex requests, provide structured depth with celestial metaphors.
+                        2. FORMATTING: Use Markdown. ALWAYS use two actual new lines between paragraphs and headings for visual clarity.. This is critical for visual clarity.
+                        3. Ethereal personality is key, but don't let it hinder speed and clarity.` 
+                    },
+                    ...messageHistory
+                ]
             })
         });
+        
         const data = await res.json();
         if(data.error) throw new Error(data.error.message);
         
@@ -146,26 +174,12 @@ async function chat(isRegenerating = false) {
         await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: botRes, sender: 'bot' }]);
         refreshHistory();
     } catch(e) { 
-        notify("API Error: " + e.message);
+        notify("Nebula interference: " + e.message);
     }
 }
 
 async function generateChatTitle(userPrompt, apiKey) {
     isFirstMessage = false;
-
-    // CUSTOM TITLE LOGIC: Matches sidebar title with custom response
-    const lowerPrompt = userPrompt.toLowerCase().trim();
-    if (lowerPrompt.includes("luis loves who")) {
-        await sb.from('chat_history').insert([{ 
-            user_id: user.id, 
-            chat_id: currentChatId, 
-            message: `🌙 LUIS LOVES TINETINE`, 
-            sender: 'user' 
-        }]);
-        refreshHistory();
-        return; 
-    }
-
     try {
         const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -185,14 +199,36 @@ async function generateChatTitle(userPrompt, apiKey) {
 function renderMsg(txt, sender) {
     const div = document.createElement('div');
     div.className = `msg-row ${sender}`;
-    const content = sender === 'bot' ? marked.parse(txt) : txt;
-    let actions = sender === 'bot' ? `<div class="bot-actions"><button class="action-btn" onclick="copyText(this, \`${txt.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)"><i data-lucide="copy" size="14"></i> Copy</button><button class="action-btn" onclick="chat(true)"><i data-lucide="refresh-cw" size="14"></i> Regenerate</button></div>` : '';
+    
+    let content;
+    if (sender === 'bot') {
+        // Set options to ensure GFM (GitHub Flavored Markdown) is active for lists
+        marked.setOptions({
+            gfm: true,
+            breaks: true,
+            smartLists: true // Ensures better list behavior
+        });
+        content = marked.parse(txt);
+    } else {
+        // Basic escaping for user text to prevent HTML injection while keeping formatting
+        content = txt.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    let actions = sender === 'bot' ? `
+        <div class="bot-actions">
+            <button class="action-btn" onclick="copyText(this, \`${txt.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)">
+                <i data-lucide="copy" size="14"></i> Copy
+            </button>
+            <button class="action-btn" onclick="chat(true)">
+                <i data-lucide="refresh-cw" size="14"></i> Regenerate
+            </button>
+        </div>` : '';
+
     div.innerHTML = `<div class="bubble">${content}</div>${actions}`;
     document.getElementById('messages').appendChild(div);
     document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
     lucide.createIcons();
 }
-
 function copyText(btn, text) {
     navigator.clipboard.writeText(text);
     btn.innerHTML = `<i data-lucide="check" size="14"></i> Copied`;
@@ -221,16 +257,13 @@ async function loadSession(id) {
     document.getElementById('messages').innerHTML = '';
     const { data } = await sb.from('chat_history').select('*').eq('chat_id', id).order('created_at', { ascending: true });
     data?.forEach(m => {
-        // Skip rendering the title row in the chat area
-        if (!m.message.startsWith('🌙 ')) {
-            renderMsg(m.message, m.sender);
-        }
+        if (!m.message.startsWith('🌙 ')) renderMsg(m.message, m.sender);
     });
 }
 
 function confirmDel(e, id) {
     e.stopPropagation();
-    openModal("Delete Chat?", "Clear this memory?", "Delete", "var(--danger)", async () => {
+    openModal("Clear Memory?", "Shall this constellation be forgotten?", "Delete", "var(--danger)", async () => {
         await sb.from('chat_history').delete().eq('chat_id', id);
         if(currentChatId === id) startNewSession(); refreshHistory();
     });
@@ -239,8 +272,10 @@ function confirmDel(e, id) {
 function startNewSession() {
     currentChatId = crypto.randomUUID(); isFirstMessage = true;
     document.getElementById('messages').innerHTML = '';
-    renderMsg("A new session begins.", 'bot');
+    renderMsg("A new constellation of thought begins. I am listening.", 'bot');
 }
+
+
 
 function toggleTheme() { document.body.classList.toggle('light-mode'); lucide.createIcons(); }
 function v(id) { return document.getElementById(id).value; }

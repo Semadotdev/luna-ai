@@ -31,7 +31,10 @@
             <h1>Luna</h1>
             <p class="auth-tagline">Intelligence That Shines.</p>
             <input type="email" id="in-email" class="auth-input" placeholder="Email Address">
-            <input type="password" id="in-password" class="auth-input" placeholder="Password">
+            <div class="password-wrapper">
+                <input type="password" id="in-password" class="auth-input" placeholder="Password">
+                <i data-lucide="eye" class="toggle-password" onclick="togglePasswordVisibility('in-password', this)"></i>
+            </div>
             <button class="btn-luna" onclick="handleSignIn()">Enter the Moonlight</button>
             <button onclick="toggleAuth(true)" style="background:none; border:none; color:var(--text-muted); margin-top:25px; cursor:pointer;">New here? <span style="color: var(--primary)">Join Luna</span></button>
         </div>
@@ -43,7 +46,10 @@
             <h1>Join Luna</h1>
             <p class="auth-tagline">Create your celestial ID.</p>
             <input type="email" id="up-email" class="auth-input" placeholder="Email Address">
-            <input type="password" id="up-pass" class="auth-input" placeholder="Create Password">
+            <div class="password-wrapper">
+                <input type="password" id="up-pass" class="auth-input" placeholder="Create Password">
+                <i data-lucide="eye" class="toggle-password" onclick="togglePasswordVisibility('up-pass', this)"></i>
+            </div>
             <button class="btn-luna" onclick="handleSignUp()">Start Journey</button>
             <button onclick="toggleAuth(false)" style="background:none; border:none; color:var(--text-muted); margin-top:25px; cursor:pointer;">Already a member? <span style="color: var(--primary)">Login</span></button>
         </div>
