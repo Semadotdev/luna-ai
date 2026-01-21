@@ -180,20 +180,44 @@ async function chat(isRegenerating = false) {
 
 async function generateChatTitle(userPrompt, apiKey) {
     isFirstMessage = false;
+    let title;
+
+    if (userPrompt.trim().toLowerCase() === "luis loves who?") {
+        title = "Luis Loves Her";
+    } else {
+        try {
+            const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: { 
+                    "Authorization": `Bearer ${apiKey}`, 
+                    "Content-Type": "application/json" 
+                },
+                body: JSON.stringify({
+                    model: "llama-3.3-70b-versatile",
+                    messages: [
+                        { role: "system", content: "Summarize into 3 words. No quotes." }, 
+                        { role: "user", content: userPrompt }
+                    ]
+                })
+            });
+            const data = await res.json();
+            title = data.choices?.[0]?.message?.content || "New Chat";
+        } catch(e) {
+            title = "New Chat";
+        }
+    }
+
     try {
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
-                messages: [{ role: "system", content: "Summarize into 3 words. No quotes." }, { role: "user", content: userPrompt }]
-            })
-        });
-        const data = await res.json();
-        const title = data.choices[0].message.content;
-        await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: `🌙 ${title}`, sender: 'user' }]);
+        await sb.from('chat_history').insert([{ 
+            user_id: user.id, 
+            chat_id: currentChatId, 
+            message: `🌙 ${title}`, 
+            sender: 'user' 
+        }]);
         refreshHistory();
-    } catch(e) {}
+    } catch (dbError) {
+        console.error("Error saving title:", dbError);
+    }
 }
 
 function renderMsg(txt, sender) {
@@ -281,3 +305,4 @@ function toggleTheme() { document.body.classList.toggle('light-mode'); lucide.cr
 function v(id) { return document.getElementById(id).value; }
 
 lucide.createIcons();
+
