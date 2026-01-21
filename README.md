@@ -4,11 +4,6 @@ Luna is a sleek, celestial-themed AI chat interface powered by **Groq's Llama 3*
 
 ---
 
-## ❤️ Dedication
-**This project is dedicated to Kristine Morta, the love of my life.** 🌙
-
----
-
 ## ✨ Features
 
 * **BYOK Architecture:** Your Groq API key is stored locally in your browser, never hitting a third-party server besides Groq itself.
