@@ -85,6 +85,25 @@ Enable Row-Level Security and add policies for authenticated users to read/write
 └── .env.example   Environment template
 ```
 
+## Deploy to Vercel
+
+[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new)
+
+1. Push this repo to GitHub
+2. Import it in Vercel — the `vercel.json` is already configured
+3. Add `GROQ_API_KEY` in **Project Settings → Environment Variables**
+4. Deploy — that's it
+
+Vercel detects the `@vercel/node` builder automatically and routes all requests through `server.js`.
+
+### Required env variables
+
+| Variable | Source |
+|---|---|
+| `GROQ_API_KEY` | [Groq Console](https://console.groq.com/keys) |
+
+No build step needed — `npm install` runs automatically.
+
 ## License
 
 MIT
