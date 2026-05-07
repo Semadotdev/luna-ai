@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luna | Intelligence That Shines</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&family=Comfortaa:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="config.js"></script>
+    <script src="main.js"></script>
+</head>
+<body>
+
+    <div id="toast"><i data-lucide="sparkles" size="18"></i> <span id="toast-text"></span></div>
+    
+    <div id="sidebar-backdrop" onclick="toggleSidebarMenu()"></div>
+
+    <div id="modal-overlay">
+        <div class="modal">
+            <h3 id="modal-title" style="color: var(--text-main)">Confirm Action</h3>
+            <p id="modal-desc" style="margin-top: 10px; font-size: 14px; color: var(--text-muted);"></p>
+            <div class="modal-btns">
+                <button class="modal-btn" style="background:var(--border); color:var(--text-main)" onclick="closeModal()">Cancel</button>
+                <button id="modal-confirm-btn" class="modal-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="login-page" class="auth-page">
+        <div class="auth-card">
+            <i data-lucide="moon" size="64"></i>
+            <h1>Luna</h1>
+            <p class="auth-tagline">Intelligence That Shines.</p>
+            <input type="email" id="in-email" class="auth-input" placeholder="Email Address">
+            <input type="password" id="in-password" class="auth-input" placeholder="Password" style="color: var(--text-main);">
+            <button class="btn-luna" onclick="handleSignIn()">Enter the Moonlight</button>
+            <button onclick="toggleAuth(true)" style="background:none; border:none; color:var(--text-muted); margin-top:25px; cursor:pointer;">New here? <span style="color: var(--primary)">Join Luna</span></button>
+        </div>
+    </div>
+    
+    <div id="signup-page" class="auth-page hidden">
+        <div class="auth-card">
+            <i data-lucide="sparkles" size="64"></i>
+            <h1>Join Luna</h1>
+            <p class="auth-tagline">Create your celestial ID.</p>
+            <input type="email" id="up-email" class="auth-input" placeholder="Email Address">
+            <input type="password" id="up-pass" class="auth-input" placeholder="Create Password" style="color: var(--text-main);">
+            <button class="btn-luna" onclick="handleSignUp()">Start Journey</button>
+            <button onclick="toggleAuth(false)" style="background:none; border:none; color:var(--text-muted); margin-top:25px; cursor:pointer;">Already a member? <span style="color: var(--primary)">Login</span></button>
+        </div>
+    </div>
+    
+    <div id="sidebar" class="hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 35px;">
+            <div style="font-weight: 900; color: var(--text-main); font-size: 28px; display: flex; align-items: center; gap: 12px; font-family: 'Comfortaa', cursive; letter-spacing: 0.5px;">
+                <i data-lucide="moon"></i> Luna
+            </div>
+            <button class="close-sidebar-btn" onclick="toggleSidebarMenu()">
+                <i data-lucide="x" size="24"></i>
+            </button>
+        </div>
+        <button class="new-chat-btn" onclick="startNewSession(); closeSidebarOnMobile();">+ NEW SESSION</button>
+        <div id="history-list" style="flex:1; overflow-y:auto; margin-top:10px;"></div>
+        <div style="margin-top: auto; padding-top: 25px; border-top: 1px solid var(--border);">
+            <button onclick="toggleTheme()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; gap:12px; font-size:14px; margin-bottom:15px;">
+                <i data-lucide="sun"></i> <span>Theme Mode</span>
+            </button>
+            <button onclick="confirmSignOut()" style="background:none; border:none; color:var(--danger); cursor:pointer; display:flex; align-items:center; gap:12px; font-size:14px;">
+                <i data-lucide="log-out"></i> Sign Out
+            </button>
+        </div>
+    </div>
+
+    <div id="main" class="hidden">
+        <div id="mobile-nav">
+            <button onclick="toggleSidebarMenu()" style="background:none; border:none; color:var(--primary); cursor:pointer;">
+                <i data-lucide="menu" size="24"></i>
+            </button>
+            <span style="font-weight: 800; color:var(--text-main); font-family: 'Comfortaa', cursive; letter-spacing: 0.5px;">LUNA</span>
+            <button onclick="startNewSession()" style="background:none; border:none; color:var(--primary); cursor:pointer;">
+                <i data-lucide="plus" size="24"></i>
+            </button>
+        </div>
+
+        <div id="messages"></div>
+        <div id="input-area">
+            <div id="typing-container" class="hidden">
+                <div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+            </div>
+            <div class="input-wrapper">
+                <input type="text" id="userInput" placeholder="Illuminate a thought..." onkeypress="if(event.key==='Enter') chat()">
+                <button onclick="chat()" style="background:none; border:none; color:var(--primary); cursor:pointer;">
+                    <i data-lucide="arrow-up-circle" size="36" fill="currentColor"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
