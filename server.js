@@ -11,10 +11,13 @@ app.use(express.static(__dirname));
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_KEY = process.env.GROQ_API_KEY;
+console.log('GROQ_KEY set:', !!GROQ_KEY);
 
 app.post('/api/chat', async (req, res) => {
     try {
         const { messages, stream = true } = req.body;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
         const response = await fetch(GROQ_API_URL, {
             method: 'POST',
             headers: {
@@ -25,8 +28,10 @@ app.post('/api/chat', async (req, res) => {
                 model: 'llama-3.3-70b-versatile',
                 messages,
                 stream: stream
-            })
+            }),
+            signal: controller.signal
         });
+        clearTimeout(timeout);
 
         // Check for non-200 response
         if (!response.ok) {
@@ -41,7 +46,8 @@ app.post('/api/chat', async (req, res) => {
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
-            res.setHeader('Connection', 'keep-alive');
+            res.setHeader('X-Accel-Buffering', 'no');
+            res.flushHeaders();
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();

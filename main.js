@@ -177,6 +177,7 @@ async function chat(isRegenerating = false) {
             ? `\n\nHere are facts about the user that you always remember:\n${userMemories.map(m => `- ${m.memory_key}: ${m.memory_value}`).join('\n')}`
             : '';
 
+        const isVercel = !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
         const response = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -191,7 +192,7 @@ Always use Markdown for responses. You may use emojis (especially celestial ones
 
 Maintain your divine yet approachable tone — you are a goddess, but one who guides and illuminates.${memoryContext}` },
                 ...conversationHistory
-            ], stream: true })
+            ], stream: !isVercel })
         });
 
         const botMsgDiv = document.createElement('div');
@@ -204,27 +205,33 @@ Maintain your divine yet approachable tone — you are a goddess, but one who gu
         
         document.getElementById('typing-container').classList.add('hidden');
         
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
         let fullText = '';
-        
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+
+        if (isVercel) {
+            const data = await response.json();
+            fullText = data.choices?.[0]?.message?.content || '';
+        } else {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
             
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n');
-            
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const data = line.slice(6);
-                    if (data === '[DONE]') continue;
-                    try {
-                        const json = JSON.parse(data);
-                        const token = json.choices?.[0]?.delta?.content || '';
-                        if (!token) continue;
-                        fullText += token;
-                    } catch (e) {}
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        if (data === '[DONE]') continue;
+                        try {
+                            const json = JSON.parse(data);
+                            const token = json.choices?.[0]?.delta?.content || '';
+                            if (!token) continue;
+                            fullText += token;
+                        } catch (e) {}
+                    }
                 }
             }
         }
