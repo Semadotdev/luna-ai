@@ -205,6 +205,12 @@ Maintain your divine yet approachable tone — you are a goddess, but one who gu
         
         document.getElementById('typing-container').classList.add('hidden');
         
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            notify(errData.error || `Error ${response.status}`);
+            throw new Error(errData.error || `HTTP ${response.status}`);
+        }
+        
         let fullText = '';
 
         if (isVercel) {

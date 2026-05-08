@@ -11,7 +11,10 @@ app.use(express.static(__dirname));
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_KEY = process.env.GROQ_API_KEY;
-console.log('GROQ_KEY set:', !!GROQ_KEY);
+
+app.get('/api/health', (req, res) => {
+    res.json({ ok: true, groqKeySet: !!GROQ_KEY });
+});
 
 app.post('/api/chat', async (req, res) => {
     try {
