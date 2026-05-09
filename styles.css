@@ -9,6 +9,7 @@
     --text-muted: #A78BFA;
     --border: #2D1B46;
     --input-bg: #190D26;
+    --bg-code: #1a1a2e;
 }
 
 body.light-mode {
@@ -19,6 +20,7 @@ body.light-mode {
     --text-muted: #6D28D9;
     --border: #E9D5FF;
     --input-bg: #FFFFFF;
+    --bg-code: #F0EBFF;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', 'Inter', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'; transition: background 0.3s; }
@@ -192,7 +194,8 @@ input { flex: 1; border: none; background: transparent; color: var(--text-main);
 }
 
 .bubble pre {
-    background: #1a1a2e;
+    background: var(--bg-code);
+    color: var(--text-main);
     border-radius: 8px;
     padding: 16px;
     overflow-x: auto;
