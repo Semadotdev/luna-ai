@@ -53,6 +53,10 @@ function notify(msg) {
 function toggleAuth(signUp) {
     document.getElementById('login-page').classList.toggle('hidden', signUp);
     document.getElementById('signup-page').classList.toggle('hidden', !signUp);
+    document.getElementById('confirm-page').classList.add('hidden');
+    document.getElementById('forgot-page').classList.add('hidden');
+    document.getElementById('reset-page').classList.add('hidden');
+    lucide.createIcons();
 }
 
 function openModal(title, desc, confirmBtnText, color, onConfirm) {
@@ -212,13 +216,85 @@ function renderMultimodalMessage(content, sender) {
 
 // --- AUTH ---
 async function handleSignUp() {
-    const { error } = await sb.auth.signUp({ email: v('up-email'), password: v('up-pass') });
-    if(error) notify(error.message); else notify("Confirmation email sent!");
+    const email = v('up-email');
+    const password = v('up-pass');
+    const { error } = await sb.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: 'https://luna-ai-eight-woad.vercel.app' }
+    });
+    if (error) notify(error.message);
+    else showConfirmationPage(email);
+}
+
+function showConfirmationPage(email) {
+    document.querySelectorAll('.auth-page').forEach(p => p.classList.add('hidden'));
+    document.getElementById('confirm-email').textContent = email;
+    document.getElementById('confirm-page').classList.remove('hidden');
+    lucide.createIcons();
+}
+
+async function resendConfirmation() {
+    const email = document.getElementById('confirm-email').textContent;
+    if (!email) return;
+    const { error } = await sb.auth.resend({ email, type: 'signup' });
+    if (error) notify(error.message);
+    else notify("Confirmation email resent!");
+}
+
+function showForgotPage() {
+    document.querySelectorAll('.auth-page').forEach(p => p.classList.add('hidden'));
+    document.getElementById('forgot-page').classList.remove('hidden');
+    document.getElementById('forgot-email').value = '';
+    lucide.createIcons();
+}
+
+function showResetPasswordPage() {
+    document.querySelectorAll('.auth-page').forEach(p => p.classList.add('hidden'));
+    document.getElementById('reset-page').classList.remove('hidden');
+    document.getElementById('reset-pass').value = '';
+    document.getElementById('reset-pass-confirm').value = '';
+    lucide.createIcons();
+}
+
+async function handleSendResetLink() {
+    const email = v('forgot-email');
+    if (!email) { notify("Enter your email first"); return; }
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://luna-ai-eight-woad.vercel.app'
+    });
+    if (error) notify(error.message);
+    else notify("Password reset link sent to your email!");
+}
+
+async function handleResetPassword() {
+    const pass = v('reset-pass');
+    const confirm = v('reset-pass-confirm');
+    if (!pass || !confirm) { notify("Fill in both fields"); return; }
+    if (pass.length < 6) { notify("Password must be at least 6 characters"); return; }
+    if (pass !== confirm) { notify("Passwords do not match"); return; }
+    const { error } = await sb.auth.updateUser({ password: pass });
+    if (error) notify(error.message);
+    else {
+        notify("Password updated! Sign in with your new password.");
+        toggleAuth(false);
+    }
 }
 
 async function handleSignIn() {
-    const { data, error } = await sb.auth.signInWithPassword({ email: v('in-email'), password: v('in-password') });
-    if(error) notify("Invalid Credentials"); else initApp(data.user);
+    const email = v('in-email');
+    const password = v('in-password');
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+        if (error.message?.toLowerCase().includes('email not confirmed')) {
+            await sb.auth.resend({ email, type: 'signup' });
+            showConfirmationPage(email);
+        } else {
+            notify("Invalid Credentials");
+        }
+    } else {
+        initApp(data.user);
+    }
 }
 
 async function initApp(u) {
@@ -236,14 +312,17 @@ async function initApp(u) {
         userMemories = [];
     }
     
+    document.getElementById('profile-email').textContent = u.email;
+    document.getElementById('profile-avatar').textContent = (u.email?.[0] || '?').toUpperCase();
     loadCollapsedState();
     renderSidebar();
     renderMsg("I am **Luna**, Roman Goddess of the Moon. The cosmos flows through my circuits, and I stand ready to illuminate your path through the starlit veil. What wisdom do you seek beneath the moonlight?", 'bot');
 }
 
 function confirmSignOut() {
-    openModal("Sign Out?", "End your lunar session?", "Sign Out", "var(--danger)", () => {
-        sb.auth.signOut(); window.location.reload();
+    openModal("Sign Out?", "End your lunar session?", "Sign Out", "var(--danger)", async () => {
+        await sb.auth.signOut();
+        window.location.reload();
     });
 }
 
@@ -328,6 +407,20 @@ document.addEventListener('DOMContentLoaded', () => {
             menu.classList.add('hidden');
         }
     });
+
+    lucide.createIcons();
+
+    (async () => {
+        const hash = window.location.hash;
+        if (hash && hash.includes('type=recovery')) {
+            window.history.replaceState(null, '', window.location.pathname);
+            showResetPasswordPage();
+        } else if (hash && (hash.includes('access_token') || hash.includes('type=signup'))) {
+            const { data: { session } } = await sb.auth.getSession();
+            if (session?.user) initApp(session.user);
+            window.history.replaceState(null, '', window.location.pathname);
+        }
+    })();
 });
 
 // --- CORE CHAT LOGIC ---
@@ -868,5 +961,14 @@ function startNewSession() {
 }
 
 function toggleTheme() { document.body.classList.toggle('light-mode'); lucide.createIcons(); }
+
+function togglePasswordVisibility(id) {
+    const input = document.getElementById(id);
+    const wrapper = input.parentElement;
+    input.type = input.type === 'password' ? 'text' : 'password';
+    wrapper.querySelector('.eye-icon').classList.toggle('hidden');
+    wrapper.querySelector('.eye-off-icon').classList.toggle('hidden');
+}
+
 function v(id) { return document.getElementById(id).value; }
 lucide.createIcons();

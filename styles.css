@@ -37,7 +37,7 @@ body.light-mode {
 #sidebar .close-sidebar-btn [data-lucide] { color: var(--text-muted); }
 
 .history-item .del-icon[data-lucide] { color: var(--danger); }
-body { background: var(--bg-main); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; position: relative; }
+body { background: var(--bg-main); color: var(--text-main); display: flex; height: 100vh; height: 100dvh; overflow: hidden; position: relative; }
 
 #modal-overlay { 
     position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); 
@@ -62,18 +62,105 @@ body { background: var(--bg-main); color: var(--text-main); display: flex; heigh
 }
 
 /* --- AUTH PAGES --- */
-.auth-page { position: fixed; inset: 0; background: var(--bg-main); z-index: 9000; display: flex; align-items: center; justify-content: center; text-align: center; }
-.auth-card { 
-    width: 400px; padding: 45px 35px; border-radius: 28px; 
-    display: flex; flex-direction: column; align-items: center;
+.auth-page {
+    position: fixed; inset: 0; background: var(--bg-main);
+    z-index: 9000; display: flex; align-items: center;
+    justify-content: center; text-align: center;
+    overflow: hidden;
 }
-.auth-card h1 { font-size: 42px; margin-bottom: 8px; letter-spacing: 0.5px; font-family: 'Comfortaa', cursive; font-weight: 700; }
+.auth-page::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        radial-gradient(2px 2px at 12% 18%, rgba(168, 85, 247, 0.5), transparent),
+        radial-gradient(1px 1px at 28% 42%, rgba(255, 255, 255, 0.35), transparent),
+        radial-gradient(1.5px 1.5px at 48% 8%, rgba(168, 85, 247, 0.4), transparent),
+        radial-gradient(1px 1px at 72% 28%, rgba(255, 255, 255, 0.25), transparent),
+        radial-gradient(1px 1px at 82% 62%, rgba(168, 85, 247, 0.35), transparent),
+        radial-gradient(2px 2px at 18% 72%, rgba(255, 255, 255, 0.3), transparent),
+        radial-gradient(1px 1px at 38% 88%, rgba(168, 85, 247, 0.4), transparent),
+        radial-gradient(1.5px 1.5px at 58% 52%, rgba(255, 255, 255, 0.25), transparent),
+        radial-gradient(1px 1px at 88% 12%, rgba(168, 85, 247, 0.45), transparent),
+        radial-gradient(1.5px 1.5px at 32% 32%, rgba(255, 255, 255, 0.2), transparent),
+        radial-gradient(1px 1px at 78% 78%, rgba(168, 85, 247, 0.35), transparent),
+        radial-gradient(2px 2px at 8% 52%, rgba(255, 255, 255, 0.25), transparent),
+        radial-gradient(1px 1px at 52% 68%, rgba(168, 85, 247, 0.3), transparent),
+        radial-gradient(1.5px 1.5px at 68% 3%, rgba(255, 255, 255, 0.35), transparent),
+        radial-gradient(1px 1px at 92% 42%, rgba(168, 85, 247, 0.4), transparent),
+        radial-gradient(1.5px 1.5px at 42% 12%, rgba(255, 255, 255, 0.2), transparent),
+        radial-gradient(1px 1px at 22% 92%, rgba(168, 85, 247, 0.35), transparent),
+        radial-gradient(2px 2px at 62% 36%, rgba(255, 255, 255, 0.25), transparent);
+    z-index: 0;
+    pointer-events: none;
+}
+body.light-mode .auth-page::before {
+    background-image:
+        radial-gradient(2px 2px at 12% 18%, rgba(109, 40, 217, 0.3), transparent),
+        radial-gradient(1px 1px at 28% 42%, rgba(30, 27, 75, 0.15), transparent),
+        radial-gradient(1.5px 1.5px at 48% 8%, rgba(109, 40, 217, 0.25), transparent),
+        radial-gradient(1px 1px at 72% 28%, rgba(30, 27, 75, 0.1), transparent),
+        radial-gradient(1px 1px at 82% 62%, rgba(109, 40, 217, 0.2), transparent),
+        radial-gradient(2px 2px at 18% 72%, rgba(30, 27, 75, 0.12), transparent),
+        radial-gradient(1px 1px at 38% 88%, rgba(109, 40, 217, 0.25), transparent),
+        radial-gradient(1.5px 1.5px at 58% 52%, rgba(30, 27, 75, 0.1), transparent),
+        radial-gradient(1px 1px at 88% 12%, rgba(109, 40, 217, 0.3), transparent),
+        radial-gradient(1.5px 1.5px at 32% 32%, rgba(30, 27, 75, 0.08), transparent),
+        radial-gradient(1px 1px at 78% 78%, rgba(109, 40, 217, 0.2), transparent),
+        radial-gradient(2px 2px at 8% 52%, rgba(30, 27, 75, 0.1), transparent),
+        radial-gradient(1px 1px at 52% 68%, rgba(109, 40, 217, 0.15), transparent),
+        radial-gradient(1.5px 1.5px at 68% 3%, rgba(30, 27, 75, 0.15), transparent),
+        radial-gradient(1px 1px at 92% 42%, rgba(109, 40, 217, 0.25), transparent),
+        radial-gradient(1.5px 1.5px at 42% 12%, rgba(30, 27, 75, 0.08), transparent),
+        radial-gradient(1px 1px at 22% 92%, rgba(109, 40, 217, 0.2), transparent),
+        radial-gradient(2px 2px at 62% 36%, rgba(30, 27, 75, 0.12), transparent);
+}
+.auth-card {
+    width: 400px; padding: 45px 35px; border-radius: 28px;
+    display: flex; flex-direction: column; align-items: center;
+    box-shadow: 0 0 60px rgba(168, 85, 247, 0.06), 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 1;
+    position: relative;
+}
+.auth-card > [data-lucide]:first-child {
+    filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.5));
+}
+body.light-mode .auth-card {
+    box-shadow: 0 0 40px rgba(168, 85, 247, 0.08), 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+body.light-mode .auth-card > [data-lucide]:first-child {
+    filter: drop-shadow(0 0 16px rgba(168, 85, 247, 0.3));
+}
+.auth-card h1 { font-size: 42px; margin: 16px 0 8px; letter-spacing: 0.5px; font-family: 'Comfortaa', cursive; font-weight: 700; }
 .auth-tagline { margin-bottom: 32px; opacity: 0.8; color: var(--text-muted); }
 .auth-input { 
-    width: 100%; padding: 16px; margin-bottom: 16px; 
+    width: 100%; padding: 16px; margin-bottom: 16px;
     border-radius: 14px; background: var(--input-bg); border: 1px solid var(--border); 
     color: var(--text-main); font-size: 15px; outline: none; font-family: 'Inter', sans-serif;
 }
+.password-wrapper {
+    position: relative;
+    width: 100%;
+    margin-bottom: 16px;
+}
+.password-wrapper .auth-input { margin-bottom: 0; }
+.password-toggle {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--primary);
+    cursor: pointer;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+.password-toggle:hover { color: var(--primary-hover); }
+
 .btn-luna { 
     width: 100%; padding: 16px; background: var(--primary); color: #fff; 
     border: none; border-radius: 14px; font-weight: 700; cursor: pointer; 
@@ -196,7 +283,7 @@ input { flex: 1; border: none; background: transparent; color: var(--text-main);
     #sidebar.open { transform: translateX(0); }
     #sidebar.open ~ #sidebar-backdrop { display: block; }
     #messages, #input-area { padding-left: 20px; padding-right: 20px; }
-    #input-area { padding-bottom: 20px; }
+    #input-area { padding-bottom: max(20px, env(safe-area-inset-bottom, 20px)); }
     .auth-card { width: 90%; }
     .bubble { max-width: 95%; }
 }
