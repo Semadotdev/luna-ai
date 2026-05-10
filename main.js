@@ -381,15 +381,30 @@ function renderMultimodalMessage(content, sender) {
     lucide.createIcons();
 }
 
+// --- LOADING OVERLAY ---
+function showLoading(text) {
+    document.getElementById('loading-text').textContent = text || 'Loading…';
+    document.getElementById('loading-overlay').classList.remove('hidden');
+    const btns = document.querySelectorAll('.auth-card .btn-luna, .auth-card button');
+    btns.forEach(b => b.disabled = true);
+}
+function hideLoading() {
+    document.getElementById('loading-overlay').classList.add('hidden');
+    const btns = document.querySelectorAll('.auth-card .btn-luna, .auth-card button');
+    btns.forEach(b => b.disabled = false);
+}
+
 // --- AUTH ---
 async function handleSignUp() {
     const email = v('up-email');
     const password = v('up-pass');
+    showLoading('Forging your celestial path…');
     const { error } = await sb.auth.signUp({
         email,
         password,
         options: { emailRedirectTo: window.location.origin }
     });
+    hideLoading();
     if (error) notify(error.message);
     else showConfirmationPage(email);
 }
@@ -404,7 +419,9 @@ function showConfirmationPage(email) {
 async function resendConfirmation() {
     const email = document.getElementById('confirm-email').textContent;
     if (!email) return;
+    showLoading('Sending another lunar whisper…');
     const { error } = await sb.auth.resend({ email, type: 'signup' });
+    hideLoading();
     if (error) notify(error.message);
     else notify("Confirmation email resent!");
 }
@@ -427,9 +444,11 @@ function showResetPasswordPage() {
 async function handleSendResetLink() {
     const email = v('forgot-email');
     if (!email) { notify("Enter your email first"); return; }
+    showLoading('Sending a lunar whisper…');
     const { error } = await sb.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin
     });
+    hideLoading();
     if (error) notify(error.message);
     else notify("Password reset link sent to your email!");
 }
@@ -440,7 +459,9 @@ async function handleResetPassword() {
     if (!pass || !confirm) { notify("Fill in both fields"); return; }
     if (pass.length < 6) { notify("Password must be at least 6 characters"); return; }
     if (pass !== confirm) { notify("Passwords do not match"); return; }
+    showLoading('Channeling lunar energies…');
     const { error } = await sb.auth.updateUser({ password: pass });
+    hideLoading();
     if (error) {
         if (error.message?.toLowerCase().includes('session') || error.status === 401) {
             notify("Session expired. Request a new reset link.");
@@ -456,8 +477,10 @@ async function handleResetPassword() {
 async function handleSignIn() {
     const email = v('in-email');
     const password = v('in-password');
+    showLoading('Guiding you through the moonlight…');
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
+        hideLoading();
         if (error.message?.toLowerCase().includes('email not confirmed')) {
             await sb.auth.resend({ email, type: 'signup' });
             showConfirmationPage(email);
@@ -465,7 +488,8 @@ async function handleSignIn() {
             notify("Invalid Credentials");
         }
     } else {
-        initApp(data.user);
+        await initApp(data.user);
+        hideLoading();
     }
 }
 
@@ -699,6 +723,19 @@ async function chat(isRegenerating = false) {
     setSendIcon('square');
     currentAbortController = new AbortController();
 
+    if (text && /who\s+is\s+james?[']?\s*langga/i.test(text.trim())) {
+        setSendIcon('arrow-up-circle');
+        currentAbortController = null;
+        setTimeout(async () => {
+            const secret = "The Greatest Anchor: Ja-Jaaa! 🌙";
+            document.getElementById('typing-container').classList.add('hidden');
+            renderMsg(secret, 'bot');
+            await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: secret, sender: 'bot' }]);
+            renderSidebar();
+        }, 800);
+        return;
+    }
+
     if (text && text.toLowerCase().trim() === "luis loves who?") {
         setSendIcon('arrow-up-circle');
         currentAbortController = null;
@@ -906,6 +943,7 @@ Maintain your divine yet approachable tone — you are a goddess, but one who gu
 
 async function generateChatTitle(userPrompt) {
     isFirstMessage = false;
+    showLoading('Charting the stars…');
     try {
         const res = await fetch("/api/chat", {
             method: "POST",
@@ -918,8 +956,10 @@ async function generateChatTitle(userPrompt) {
         const data = await res.json();
         const title = data.choices[0].message.content;
         await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: `🌙 ${title}`, sender: 'title' }]);
+        hideLoading();
         renderSidebar();
     } catch(e) {
+        hideLoading();
         console.error('Title generation failed:', e);
     }
 }
@@ -1276,6 +1316,7 @@ async function loadSession(id) {
     document.getElementById('messages').innerHTML = '';
     conversationHistory = [];
     lastUserContent = null;
+    showLoading('Reading the star charts…');
     
     const { data } = await sb.from('chat_history').select('*').eq('chat_id', id).order('created_at', { ascending: true });
     if (data && data.length > 0) {
@@ -1296,6 +1337,7 @@ async function loadSession(id) {
             console.error('[loadSession] failed to render message:', e, m);
         }
     });
+    hideLoading();
     renderSidebar();
 }
 
@@ -1330,4 +1372,176 @@ function togglePasswordVisibility(id) {
 }
 
 function v(id) { return document.getElementById(id).value; }
+
+// --- CONSTELLATION AUTH ANIMATION ---
+function chainEdges(n) { return Array.from({length: n - 1}, (_, i) => [i, i + 1]); }
+function loopEdges(n) { return Array.from({length: n}, (_, i) => [i, (i + 1) % n]); }
+
+const constGroups = [
+  //               stars (x, y, size),                        edges,         speed, offset, opts
+  { s: [[0.06,0.10,0.5],[0.12,0.06,0.6],[0.18,0.08,0.4],[0.24,0.14,0.7],[0.22,0.20,0.5],[0.17,0.24,1.0],[0.10,0.22,0.4],[0.04,0.17,0.8]], e: loopEdges(8),   spd:6000, off:   0, o: {br:1.0,bg: 9,hs:10,al:0.18} },
+  { s: [[0.38,0.04,0.4],[0.42,0.02,0.6],[0.46,0.05,0.3],[0.44,0.09,0.5]],                 e: loopEdges(4),   spd:3500, off:1500, o: {br:0.7,bg: 6,hs: 7,al:0.12} },
+  { s: [[0.60,0.06,0.4],[0.66,0.04,0.5],[0.72,0.08,0.3],[0.68,0.14,0.6],[0.62,0.12,0.5]], e: chainEdges(5),  spd:4500, off:1000, o: {br:0.7,bg: 6,hs: 7,al:0.12} },
+  { s: [[0.84,0.08,0.4],[0.84,0.14,0.5],[0.84,0.20,0.4],[0.90,0.10,0.4],[0.90,0.18,0.4]], e: [[0,1],[1,2],[1,3],[1,4]],                    spd:3500, off:3000, o: {br:0.7,bg: 6,hs: 7,al:0.14} },
+  { s: [[0.05,0.35,0.4],[0.10,0.32,0.5],[0.15,0.35,0.3],[0.10,0.40,0.6]],                 e: chainEdges(4),  spd:3000, off:2000, o: {br:0.6,bg: 5,hs: 6,al:0.10} },
+  { s: [[0.38,0.28,0.4],[0.42,0.24,0.5],[0.46,0.28,0.3],[0.42,0.32,0.5]],                 e: loopEdges(4),   spd:4000, off: 500, o: {br:0.6,bg: 5,hs: 6,al:0.10} },
+  { s: [[0.72,0.32,0.3],[0.78,0.30,0.4],[0.82,0.36,0.3]],                                  e: chainEdges(3),  spd:2800, off:2500, o: {br:0.5,bg: 4,hs: 5,al:0.08} },
+  { s: [[0.60,0.50,0.4],[0.66,0.48,0.5],[0.72,0.52,0.3],[0.68,0.56,0.4]],                 e: chainEdges(4),  spd:3800, off:1200, o: {br:0.6,bg: 5,hs: 6,al:0.10} },
+  { s: [[0.15,0.60,0.4],[0.20,0.56,0.5],[0.28,0.58,0.3],[0.32,0.62,0.4],[0.22,0.66,0.6]], e: chainEdges(5),  spd:4200, off:2800, o: {br:0.6,bg: 5,hs: 6,al:0.10} },
+  { s: [[0.85,0.55,0.3],[0.90,0.52,0.4],[0.95,0.55,0.3],[0.90,0.60,0.5]],                 e: chainEdges(4),  spd:3200, off:1800, o: {br:0.5,bg: 4,hs: 5,al:0.08} },
+  { s: [[0.40,0.72,0.4],[0.44,0.68,0.5],[0.48,0.72,0.3]],                                  e: loopEdges(3),   spd:2600, off:3500, o: {br:0.5,bg: 4,hs: 5,al:0.08} },
+  { s: [[0.10,0.82,0.4],[0.16,0.80,0.5],[0.22,0.84,0.3],[0.28,0.88,0.4]],                 e: chainEdges(4),  spd:3600, off: 800, o: {br:0.6,bg: 5,hs: 6,al:0.10} },
+  { s: [[0.65,0.82,0.3],[0.70,0.78,0.5],[0.74,0.84,0.3],[0.68,0.90,0.4]],                 e: chainEdges(4),  spd:3400, off:2200, o: {br:0.5,bg: 4,hs: 5,al:0.08} },
+  { s: [[0.35,0.92,0.4],[0.42,0.88,0.5],[0.48,0.92,0.3],[0.42,0.96,0.4],[0.36,0.96,0.4]], e: chainEdges(5),  spd:4000, off:1600, o: {br:0.6,bg: 5,hs: 6,al:0.10} },
+];
+
+let authAnimId = null;
+let authAnimStart = 0;
+
+function drawStar(ctx, x, y, baseRadius, baseGlow, pulse, sizeMult) {
+  const r = baseRadius * pulse * (sizeMult || 1);
+  const g = baseGlow * pulse * (sizeMult || 1);
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, g);
+  grad.addColorStop(0, 'rgba(192, 132, 252, 0.7)');
+  grad.addColorStop(0.3, 'rgba(168, 85, 247, 0.25)');
+  grad.addColorStop(1, 'rgba(168, 85, 247, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(x, y, g, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#c084fc';
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawStreakHead(ctx, x, y, size) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, size);
+  g.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+  g.addColorStop(0.1, 'rgba(192, 132, 252, 0.6)');
+  g.addColorStop(0.5, 'rgba(168, 85, 247, 0.15)');
+  g.addColorStop(1, 'rgba(168, 85, 247, 0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, size, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawConstellationSet(ctx, stars, edges, progress, w, h, pulse, opts) {
+  const { baseR = 1, baseG = 8, strokeW = 1.5, headSize = 10, alpha = 0.2 } = opts || {};
+  const total = edges.length;
+  const full = Math.floor(progress * total);
+  const part = (progress * total) - full;
+
+  for (let i = 0; i < edges.length; i++) {
+    const [a, b] = edges[i];
+    const x1 = stars[a][0] * w, y1 = stars[a][1] * h;
+    const x2 = stars[b][0] * w, y2 = stars[b][1] * h;
+
+    if (i < full) {
+      ctx.strokeStyle = `rgba(168, 85, 247, ${alpha})`;
+      ctx.lineWidth = strokeW * 0.6;
+      ctx.setLineDash([3, 5]);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.setLineDash([]);
+    } else if (i === full) {
+      ctx.strokeStyle = `rgba(168, 85, 247, ${alpha})`;
+      ctx.lineWidth = strokeW * 0.6;
+      ctx.setLineDash([3, 5]);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.setLineDash([]);
+
+      const mx = x1 + (x2 - x1) * part;
+      const my = y1 + (y2 - y1) * part;
+      ctx.strokeStyle = `rgba(168, 85, 247, ${alpha * 2})`;
+      ctx.lineWidth = strokeW;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(mx, my); ctx.stroke();
+      drawStreakHead(ctx, mx, my, headSize);
+    }
+  }
+
+  for (const s of stars) {
+    drawStar(ctx, s[0] * w, s[1] * h, baseR, baseG, pulse, s[2]);
+  }
+}
+
+function authAnimLoop(time) {
+  const canvas = document.querySelector('.auth-page:not(.hidden) > .auth-canvas');
+  if (!canvas) { authAnimId = null; return; }
+
+  const parent = canvas.parentElement;
+  const rect = parent.getBoundingClientRect();
+  const dpr = devicePixelRatio || 1;
+  if (canvas.width !== Math.round(rect.width * dpr)) {
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+  }
+
+  const ctx = canvas.getContext('2d');
+  const w = rect.width, h = rect.height;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  if (!authAnimStart) authAnimStart = time;
+  const elapsed = time - authAnimStart;
+  const pulse = 0.7 + 0.3 * Math.sin(elapsed / 800);
+
+  for (const g of constGroups) {
+    const prog = ((elapsed + g.off) % g.spd) / g.spd;
+    drawConstellationSet(ctx, g.s, g.e, prog, w, h, pulse, {
+      baseR: g.o.br, baseG: g.o.bg, headSize: g.o.hs, alpha: g.o.al
+    });
+  }
+
+  authAnimId = requestAnimationFrame(authAnimLoop);
+}
+
+function stopAuthAnimation() {
+  if (authAnimId) { cancelAnimationFrame(authAnimId); authAnimId = null; }
+  authAnimStart = 0;
+}
+
+function startAuthAnimation() {
+  stopAuthAnimation();
+  authAnimId = requestAnimationFrame(authAnimLoop);
+}
+
+// Hook into auth navigation
+const origToggleAuth = toggleAuth;
+toggleAuth = function(signUp) {
+  origToggleAuth(signUp);
+  startAuthAnimation();
+};
+
+const origShowConfirmation = showConfirmationPage;
+showConfirmationPage = function(email) {
+  origShowConfirmation(email);
+  startAuthAnimation();
+};
+
+const origShowForgot = showForgotPage;
+showForgotPage = function() {
+  origShowForgot();
+  startAuthAnimation();
+};
+
+const origShowReset = showResetPasswordPage;
+showResetPasswordPage = function() {
+  origShowReset();
+  startAuthAnimation();
+};
+
+const origInitApp = initApp;
+initApp = async function(u) {
+  await origInitApp(u);
+  stopAuthAnimation();
+};
+
+// Start on page load if an auth page is visible
+document.addEventListener('DOMContentLoaded', () => {
+  if (document.querySelector('.auth-page:not(.hidden)')) startAuthAnimation();
+});
+
 lucide.createIcons();

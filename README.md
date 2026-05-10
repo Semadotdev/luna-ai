@@ -28,7 +28,7 @@ Supabase config (`SB_URL`, `SB_KEY`) lives in `config.js` — these are anon key
 
 ### Database
 
-The app expects two Supabase tables:
+The app expects three Supabase tables:
 
 **`chat_history`**
 | Column | Type |
@@ -37,8 +37,18 @@ The app expects two Supabase tables:
 | `user_id` | uuid (references `auth.users`) |
 | `chat_id` | uuid |
 | `message` | text |
-| `sender` | text ('user' or 'bot') |
+| `sender` | text ('user', 'bot', or 'title') |
+| `constellation_id` | uuid (nullable, FK → constellations.id ON DELETE SET NULL) |
 | `created_at` | timestamptz (default `now()`) |
+
+**`constellations`**
+| Column | Type |
+|---|---|
+| `id` | uuid (PK, default `gen_random_uuid()`) |
+| `user_id` | uuid (references `auth.users`) |
+| `name` | text |
+| `position` | integer |
+| `created_at` | timestamptz |
 
 **`user_memory`**
 | Column | Type |
@@ -65,12 +75,22 @@ Enable Row-Level Security and add policies for authenticated users to read/write
 ## Features
 
 - Streaming AI responses with real-time token rendering
+- **Stop generation** — abort mid-stream with a stop button in the input
 - Session history (auto-saved per conversation)
-- User memory (name detection + persistence)
+- **Constellation folders** — group sessions with CRUD, move, collapse
+- **Search chat history** — filter sessions by text in the sidebar
+- **Session rename** — rename from context menu
+- **Message timestamps** — relative time on each message
+- **User memory** — auto-detected (name) + manual memory manager modal
+- **Code copy button** — per-code-block copy on hover
+- **Voice input** — browser speech-to-text with "thank you luna" auto-send
+- **Keyboard shortcuts** — Cmd+K (search), Cmd+Enter (send), Escape (close)
+- **File attachments** — images (vision), PDF/DOCX, audio transcription
+- **Email auth** — sign-up confirmation, forgot/reset password flow
 - Light/dark theme toggle
 - Mobile-responsive UI
 - Regenerate bot responses
-- Markdown rendering with syntax-highlighted code blocks
+- Markdown rendering with syntax-highlighted code blocks (highlight.js)
 - Easter egg: ask "luis loves who?"
 
 ## Project Structure
@@ -79,10 +99,11 @@ Enable Row-Level Security and add policies for authenticated users to read/write
 ├── server.js      Express server — proxies Groq API
 ├── main.js        Chat, auth, UI, streaming SSE client
 ├── styles.css     All styles + markdown rendering
-├── config.js      Supabase public config
-├── index.html     Main page (loads external CSS/JS)
-├── package.json   Node dependencies
-└── .env.example   Environment template
+├── config.js           Supabase public config
+├── index.html          Main page (loads external CSS/JS)
+├── email-template.html Supabase email templates (confirm signup + reset password)
+├── package.json        Node dependencies
+└── .env.example        Environment template
 ```
 
 ## Deploy to Vercel

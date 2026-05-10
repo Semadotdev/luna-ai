@@ -37,6 +37,7 @@
     </div>
 
     <div id="login-page" class="auth-page">
+        <canvas class="auth-canvas"></canvas>
         <div class="auth-card">
             <i data-lucide="moon" size="64"></i>
             <h1>Luna</h1>
@@ -64,6 +65,7 @@
     </div>
     
     <div id="signup-page" class="auth-page hidden">
+        <canvas class="auth-canvas"></canvas>
         <div class="auth-card">
             <i data-lucide="sparkles" size="64"></i>
             <h1>Join Luna</h1>
@@ -90,6 +92,7 @@
     </div>
 
     <div id="confirm-page" class="auth-page hidden">
+        <canvas class="auth-canvas"></canvas>
         <div class="auth-card">
             <i data-lucide="mail" size="64"></i>
             <h1>Check Your Inbox</h1>
@@ -103,6 +106,7 @@
     </div>
     
     <div id="forgot-page" class="auth-page hidden">
+        <canvas class="auth-canvas"></canvas>
         <div class="auth-card">
             <i data-lucide="key-round" size="64"></i>
             <h1>Forgot Password</h1>
@@ -114,6 +118,7 @@
     </div>
 
     <div id="reset-page" class="auth-page hidden">
+        <canvas class="auth-canvas"></canvas>
         <div class="auth-card">
             <i data-lucide="shield" size="64"></i>
             <h1>Set New Password</h1>
@@ -246,6 +251,23 @@
             <i data-lucide="upload" size="48"></i>
             <p>Drop files here</p>
             <span>Images, PDFs, documents, audio</span>
+        </div>
+    </div>
+
+    <div id="loading-overlay" class="hidden">
+        <div class="loader-body">
+            <svg class="loader-svg" viewBox="0 0 100 100" width="70" height="70">
+                <line class="ll" x1="10" y1="30" x2="30" y2="10" />
+                <line class="ll" x1="30" y1="10" x2="50" y2="40" />
+                <line class="ll" x1="50" y1="40" x2="70" y2="10" />
+                <line class="ll" x1="70" y1="10" x2="90" y2="30" />
+                <circle class="ls" cx="10" cy="30" r="3" style="--i:1" />
+                <circle class="ls" cx="30" cy="10" r="4" style="--i:2" />
+                <circle class="ls" cx="50" cy="40" r="2.5" style="--i:3" />
+                <circle class="ls" cx="70" cy="10" r="3.5" style="--i:4" />
+                <circle class="ls" cx="90" cy="30" r="3" style="--i:5" />
+            </svg>
+            <p id="loading-text">Guiding you through the moonlight…</p>
         </div>
     </div>
 
