@@ -184,8 +184,10 @@ function toggleVoiceInput() {
       voiceRecognition.onresult = (e) => {
         if (!isListening) return;
         const input = document.getElementById('userInput');
-        const last = e.results[e.results.length - 1];
-        const transcript = last[0].transcript;
+        let transcript = '';
+        for (let i = 0; i < e.results.length; i++) {
+          transcript += e.results[i][0].transcript;
+        }
 
         if (/forget\s+it[\s,.]*luna/i.test(transcript)) {
           input.value = '';
@@ -197,9 +199,7 @@ function toggleVoiceInput() {
           return;
         }
 
-        if (input.value.length === 0 || transcript.startsWith(input.value)) {
-          input.value = transcript;
-        }
+        input.value = transcript;
 
         if (/thank(s|\s+you)?[\s,.]*luna/i.test(transcript)) {
           voiceTriggerStop = true;
@@ -228,7 +228,9 @@ function toggleVoiceInput() {
         if (isListening && voiceRestartCount < 2) {
           voiceRestartCount++;
           setTimeout(() => {
-            if (isListening && !voiceManualStop) voiceRecognition.start();
+            if (isListening && !voiceManualStop) {
+              try { voiceRecognition.start(); } catch(e) { voiceCleanupUI(); }
+            }
           }, 2000);
         }
       };
@@ -253,11 +255,16 @@ function toggleVoiceInput() {
 
     voiceRetryCount = 0;
     voiceRestartCount = 0;
-    playListeningChime();
-    voiceRecognition.start();
     isListening = true;
     voiceManualStop = false;
     voiceTriggerStop = false;
+    playListeningChime();
+    try {
+      voiceRecognition.start();
+    } catch(e) {
+      if (e.name === 'InvalidStateError') { voiceCleanupUI(); return; }
+      throw e;
+    }
     document.getElementById('mic-btn').classList.add('listening');
     document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'stop-circle');
     lucide.createIcons();
@@ -265,6 +272,13 @@ function toggleVoiceInput() {
   }
 
   // === Mobile: getUserMedia + Whisper ===
+  isListening = true;
+  voiceManualStop = false;
+  voiceTriggerStop = false;
+  document.getElementById('mic-btn').classList.add('listening');
+  document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'stop-circle');
+  lucide.createIcons();
+
   (async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -279,7 +293,7 @@ function toggleVoiceInput() {
       highpass.frequency.value = 80;
       const lowpass = audioCtx.createBiquadFilter();
       lowpass.type = 'lowpass';
-      lowpass.frequency.value = 4000;
+      lowpass.frequency.value = 8000;
       const compressor = audioCtx.createDynamicsCompressor();
       const dest = audioCtx.createMediaStreamDestination();
 
@@ -288,7 +302,9 @@ function toggleVoiceInput() {
       lowpass.connect(compressor);
       compressor.connect(dest);
 
-      voiceRecorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm' });
+      const micMime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus' : '';
+      voiceRecorder = new MediaRecorder(dest.stream, micMime ? { mimeType: micMime } : undefined);
       voiceChunks = [];
 
       voiceRecorder.ondataavailable = (e) => {
@@ -310,6 +326,13 @@ function toggleVoiceInput() {
 
         const blob = new Blob(voiceChunks, { type: 'audio/webm' });
         voiceChunks = [];
+
+        if (blob.size < 300) {
+          console.warn('Voice recording blob too small:', blob.size, 'bytes');
+          notify("No audio detected");
+          voiceCleanupUI();
+          return;
+        }
 
         try {
           const fd = new FormData();
@@ -343,6 +366,7 @@ function toggleVoiceInput() {
             notify("Couldn't catch that");
           }
         } catch(e) {
+          console.error('Whisper transcription error:', e);
           notify("Transcription failed");
         }
 
@@ -351,14 +375,10 @@ function toggleVoiceInput() {
 
       voiceRecorder.start();
       playListeningChime();
-      isListening = true;
-      voiceManualStop = false;
-      voiceTriggerStop = false;
-      document.getElementById('mic-btn').classList.add('listening');
-      document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'stop-circle');
-      lucide.createIcons();
 
     } catch(e) {
+      console.error('Voice start error:', e);
+      voiceCleanupUI();
       notify("Microphone access denied");
     }
   })();
