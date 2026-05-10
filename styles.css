@@ -206,6 +206,18 @@ body.light-mode .auth-card > [data-lucide]:first-child {
 .user .bubble { background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
 .bot .bubble { background: var(--bg-bubble-bot); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
 
+.msg-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  min-height: 18px;
+}
+.timestamp {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
 .bot-actions { display: flex; gap: 12px; margin-top: 8px; opacity: 0.6; }
 .action-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; }
 
@@ -265,6 +277,23 @@ input { flex: 1; border: none; background: transparent; color: var(--text-main);
     text-overflow: ellipsis; white-space: nowrap;
 }
 .bubble .file-attachment-type { font-size: 11px; color: var(--text-muted); }
+
+/* --- MIC BUTTON --- */
+#mic-btn { position: relative; }
+#mic-btn.listening { color: var(--danger) !important; }
+#mic-btn.listening [data-lucide] { color: var(--danger); animation: pulse-mic 1.2s ease-in-out infinite; }
+@keyframes pulse-mic { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.listening-badge {
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: var(--danger);
+  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
 
 .hidden { display: none !important; }
 #toast { position: fixed; top: 20px; right: 20px; background: var(--primary); color: #fff; padding: 12px 20px; border-radius: 12px; transform: translateX(250%); transition: 0.4s; z-index: 9999; display: flex; align-items: center; gap: 8px; }
@@ -333,13 +362,53 @@ input { flex: 1; border: none; background: transparent; color: var(--text-main);
 }
 
 .bubble pre {
-    background: var(--bg-code);
+    background: #0D0618;
     color: var(--text-main);
     border-radius: 8px;
     padding: 16px;
     overflow-x: auto;
     margin: 12px 0;
     position: relative;
+    border-left: 3px solid var(--primary);
+}
+body.light-mode .bubble pre {
+    background: #F5F0FF;
+    border-left-color: var(--primary);
+}
+.bubble pre::before {
+    content: "</>";
+    position: absolute;
+    top: 6px;
+    right: 30px;
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0.25;
+    font-family: monospace;
+    pointer-events: none;
+}
+.code-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 5px;
+  padding: 3px 5px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s, background 0.15s;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+.bubble pre:hover .code-copy-btn {
+  opacity: 1;
+}
+.code-copy-btn:hover {
+  opacity: 1;
+  color: var(--text-main);
+  background: var(--border);
 }
 .bubble code {
     font-family: 'Courier New', Consolas, monospace;
@@ -391,6 +460,28 @@ body.light-mode #drop-overlay {
     color: var(--text-muted); font-size: 14px;
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* --- SIDEBAR SEARCH --- */
+.sidebar-search {
+  width: 100%;
+  height: 32px;
+  flex: none;
+  padding: 0 10px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  font-size: 12px;
+  outline: none;
+  font-family: 'Inter', sans-serif;
+  box-sizing: border-box;
+}
+.sidebar-search::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
 
 /* --- SIDEBAR SCROLL --- */
 #sidebar-scroll {
@@ -603,6 +694,35 @@ body.light-mode #drop-overlay {
   background: var(--border);
   margin: 4px 0;
 }
+
+/* --- MEMORY MODAL --- */
+#memory-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+  z-index: 8000; display: none; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.memory-modal { width: 420px; max-height: 80vh; overflow-y: auto; }
+.memory-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--bg-main); border: 1px solid var(--border);
+  margin-bottom: 6px; animation: slideUp 0.2s ease;
+}
+.memory-key {
+  font-weight: 600; font-size: 12px; color: var(--primary);
+  background: rgba(168,85,247,0.1); padding: 2px 8px;
+  border-radius: 6px; flex-shrink: 0;
+}
+.memory-value {
+  flex: 1; font-size: 13px; color: var(--text-main);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.memory-del-btn {
+  background: none; border: none; color: var(--danger);
+  cursor: pointer; padding: 4px; display: flex; opacity: 0.5;
+  transition: opacity 0.15s; flex-shrink: 0;
+}
+.memory-del-btn:hover { opacity: 1; }
 
 /* --- RENAME MODAL OVERLAY --- */
 #rename-modal-overlay {

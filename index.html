@@ -10,6 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&family=Comfortaa:wght@400;600;700&display=swap" rel="stylesheet">
@@ -146,6 +148,7 @@
         </div>
         <button class="new-chat-btn" onclick="startNewSession(); closeSidebarOnMobile();">+ NEW SESSION</button>
         <button class="new-constellation-btn" onclick="showNewConstellationModal()">✦ NEW CONSTELLATION</button>
+        <input type="text" id="search-input" class="sidebar-search" placeholder="Search sessions..." oninput="onSearchInput()">
         <div id="sidebar-scroll">
             <div id="constellations-container"></div>
             <div id="uncategorized-group">
@@ -164,12 +167,31 @@
             </div>
         </div>
         <div style="padding-top: 16px; border-top: 1px solid var(--border);">
+            <button onclick="openMemoryModal()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; gap:12px; font-size:14px; margin-bottom:15px;">
+                <i data-lucide="brain"></i> <span>Memory</span>
+            </button>
             <button onclick="toggleTheme()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; gap:12px; font-size:14px; margin-bottom:15px;">
                 <i data-lucide="sun"></i> <span>Theme Mode</span>
             </button>
             <button onclick="confirmSignOut()" style="background:none; border:none; color:var(--danger); cursor:pointer; display:flex; align-items:center; gap:12px; font-size:14px;">
                 <i data-lucide="log-out"></i> Sign Out
             </button>
+        </div>
+    </div>
+
+    <div id="memory-modal-overlay" onclick="if(event.target===this)closeMemoryModal()">
+        <div class="modal memory-modal">
+            <h3 style="color: var(--text-main); display:flex; align-items:center; gap:8px; justify-content:center;"><i data-lucide="brain" size="22"></i> Luna's Memories</h3>
+            <p style="color:var(--text-muted); font-size:13px; margin:8px 0 16px;">What Luna remembers about you.</p>
+            <div id="memory-list" style="max-height:280px; overflow-y:auto; text-align:left;"></div>
+            <div id="memory-add-form" style="display:flex; gap:8px; margin-top:12px;">
+                <input type="text" id="memory-key-input" class="auth-input" placeholder="Key (e.g. name)" style="flex:1; margin-bottom:0; font-size:13px; padding:10px 12px;">
+                <input type="text" id="memory-value-input" class="auth-input" placeholder="Value" style="flex:1; margin-bottom:0; font-size:13px; padding:10px 12px;">
+                <button class="modal-btn" onclick="addMemory()" style="background:var(--primary); color:white; padding:10px 14px; flex-shrink:0;"><i data-lucide="plus" size="16"></i></button>
+            </div>
+            <div class="modal-btns">
+                <button class="modal-btn" style="background:var(--border); color:var(--text-main)" onclick="closeMemoryModal()">Close</button>
+            </div>
         </div>
     </div>
 
@@ -208,8 +230,11 @@
                 <button id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach files" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:6px 4px; display:flex; align-items:center;">
                     <i data-lucide="paperclip" size="20"></i>
                 </button>
+                <button id="mic-btn" onclick="toggleVoiceInput()" title="Voice input" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:6px 4px; display:flex; align-items:center;">
+                    <i data-lucide="mic" size="20"></i>
+                </button>
                 <input type="text" id="userInput" placeholder="Illuminate a thought..." onkeypress="if(event.key==='Enter') chat()">
-                <button onclick="chat()" style="background:none; border:none; color:var(--primary); cursor:pointer;">
+                <button id="send-btn" onclick="handleSendBtn()" style="background:none; border:none; color:var(--primary); cursor:pointer;">
                     <i data-lucide="arrow-up-circle" size="36" fill="currentColor"></i>
                 </button>
             </div>

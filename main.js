@@ -4,8 +4,28 @@ marked.setOptions({
 });
 
 function applyHighlight(element) {
+  if (typeof hljs === 'undefined') return;
   element.querySelectorAll('pre code').forEach((block) => {
     hljs.highlightElement(block);
+  });
+}
+
+function addCodeCopyButtons(container) {
+  container.querySelectorAll('pre').forEach(pre => {
+    if (pre.querySelector('.code-copy-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'code-copy-btn';
+    btn.innerHTML = '<i data-lucide="copy" size="13"></i>';
+    btn.onclick = () => {
+      const code = pre.querySelector('code');
+      const text = code ? code.textContent : pre.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.innerHTML = '<i data-lucide="check" size="13"></i>';
+        lucide.createIcons();
+        setTimeout(() => { btn.innerHTML = '<i data-lucide="copy" size="13"></i>'; lucide.createIcons(); }, 2000);
+      }).catch(() => notify("Failed to copy code."));
+    };
+    pre.appendChild(btn);
   });
 }
 
@@ -33,7 +53,10 @@ let constellations = [];
 let collapsedConstellations = new Set();
 let renameTargetId = null;
 let isNewConstellation = false;
+let isSessionRename = false;
 let currentConstellationId = null;
+let currentAbortController = null;
+let searchQuery = '';
 
 function loadCollapsedState() {
   try {
@@ -74,6 +97,147 @@ function openModal(title, desc, confirmBtnText, color, onConfirm) {
 }
 
 function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
+
+function getRelativeTime(dateStr) {
+  if (!dateStr) return '';
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const days = Math.floor(hr / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+// --- VOICE INPUT ---
+let voiceRecognition = null;
+let isListening = false;
+let voiceManualStop = false;
+let voiceTriggerStop = false;
+let voiceRetryCount = 0;
+
+function playListeningChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1108.73, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.5);
+  } catch(e) {}
+}
+
+function toggleVoiceInput() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { notify("Voice input not supported in this browser."); return; }
+  
+  if (isListening) {
+    voiceManualStop = true;
+    voiceTriggerStop = false;
+    isListening = false;
+    voiceRecognition.stop();
+    return;
+  }
+  
+  if (!voiceRecognition) {
+    voiceRecognition = new SpeechRecognition();
+    voiceRecognition.continuous = true;
+    voiceRecognition.interimResults = true;
+    voiceRecognition.lang = 'en-US';
+    
+    voiceRecognition.onresult = (e) => {
+      if (!isListening) return;
+      const input = document.getElementById('userInput');
+      let transcript = '';
+      for (let i = 0; i < e.results.length; i++) {
+        transcript += e.results[i][0].transcript;
+      }
+      input.value = transcript;
+      input.focus();
+      if (/thank(s|\s+you)?[\s,.]*luna/i.test(transcript)) {
+        voiceTriggerStop = true;
+        voiceManualStop = true;
+        isListening = false;
+        let cleanText = transcript.replace(/thank(s|\s+you)?[\s,.]*luna/gi, '').trim();
+        document.getElementById('userInput').value = cleanText;
+        voiceRecognition.stop();
+        return;
+      }
+    };
+    
+    voiceRecognition.onend = () => {
+      if (voiceManualStop) {
+        if (voiceTriggerStop) {
+          voiceTriggerStop = false;
+          const input = document.getElementById('userInput');
+          if (input.value.trim()) {
+            notify("Luna heard you ✨");
+            chat();
+          }
+        }
+        voiceManualStop = false;
+        isListening = false;
+        document.getElementById('mic-btn').classList.remove('listening');
+        document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'mic');
+        if (document.querySelector('#mic-btn .listening-badge')) {
+          document.querySelector('#mic-btn .listening-badge').remove();
+        }
+        lucide.createIcons();
+        return;
+      }
+      if (isListening) {
+        setTimeout(() => {
+          if (isListening && !voiceManualStop) voiceRecognition.start();
+        }, 2000);
+      }
+    };
+    
+    voiceRecognition.onerror = (e) => {
+      if (e.error === 'no-speech') return;
+      if (e.error === 'network') {
+        voiceRetryCount++;
+        if (voiceRetryCount > 3) {
+          voiceManualStop = true;
+          voiceTriggerStop = false;
+          isListening = false;
+          voiceRecognition.stop();
+          notify("Voice network issue. Click mic to retry.");
+        }
+        return;
+      }
+      notify("Voice input error: " + e.error);
+      voiceRecognition.stop();
+    };
+  }
+  
+  voiceManualStop = false;
+  voiceTriggerStop = false;
+  voiceRetryCount = 0;
+  playListeningChime();
+  voiceRecognition.start();
+  isListening = true;
+  document.getElementById('mic-btn').classList.add('listening');
+  const icon = document.getElementById('mic-btn').querySelector('[data-lucide]');
+  icon.setAttribute('data-lucide', 'stop-circle');
+  
+  // Add listening badge
+  const badge = document.createElement('span');
+  badge.className = 'listening-badge';
+  badge.textContent = 'Listening...';
+  document.getElementById('mic-btn').appendChild(badge);
+  
+  lucide.createIcons();
+}
 
 function escapeHtml(str) {
     const d = document.createElement('div');
@@ -320,7 +484,7 @@ async function initApp(u) {
         userMemories = [];
     }
     
-    document.getElementById('profile-email').textContent = u.email;
+    document.getElementById('profile-email').textContent = u.email.split('@')[0];
     document.getElementById('profile-avatar').textContent = (u.email?.[0] || '?').toUpperCase();
     loadCollapsedState();
     renderSidebar();
@@ -442,7 +606,51 @@ document.addEventListener('DOMContentLoaded', () => {
             window.history.replaceState(null, '', window.location.pathname);
         }
     })();
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        const mod = e.metaKey || e.ctrlKey;
+        if (mod && e.key === 'k') {
+            e.preventDefault();
+            const searchInput = document.getElementById('search-input');
+            if (searchInput) { searchInput.focus(); return; }
+        }
+        if (mod && e.key === 'Enter') {
+            e.preventDefault();
+            const main = document.getElementById('main');
+            if (!main.classList.contains('hidden')) chat();
+        }
+        if (e.key === 'Escape') {
+            closeSidebarOnMobile();
+            hideContextMenu();
+            closeModal();
+            closeRenameModal();
+            closeMemoryModal();
+        }
+    });
 });
+
+function setSendIcon(icon) {
+  document.getElementById('send-btn').innerHTML = `<i data-lucide="${icon}" size="36" fill="currentColor"></i>`;
+  lucide.createIcons();
+}
+
+function handleSendBtn() {
+  if (currentAbortController) {
+    stopGeneration();
+  } else {
+    chat();
+  }
+}
+
+function stopGeneration() {
+  if (currentAbortController) {
+    currentAbortController.abort();
+    currentAbortController = null;
+    document.getElementById('typing-container').classList.add('hidden');
+    setSendIcon('arrow-up-circle');
+  }
+}
 
 // --- CORE CHAT LOGIC ---
 async function chat(isRegenerating = false) {
@@ -488,8 +696,12 @@ async function chat(isRegenerating = false) {
     }
     
     document.getElementById('typing-container').classList.remove('hidden');
+    setSendIcon('square');
+    currentAbortController = new AbortController();
 
     if (text && text.toLowerCase().trim() === "luis loves who?") {
+        setSendIcon('arrow-up-circle');
+        currentAbortController = null;
         setTimeout(async () => {
             const secret = "His Luna - TineTine!";
             document.getElementById('typing-container').classList.add('hidden');
@@ -553,6 +765,7 @@ async function chat(isRegenerating = false) {
         const response = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: currentAbortController.signal,
             body: JSON.stringify({ messages: [
                 { role: "system", content: `You are Luna, the Roman Goddess of the Moon. You embody the celestial nature of lunar divinity — ethereal, wise, and ancient.
 
@@ -630,6 +843,27 @@ Maintain your divine yet approachable tone — you are a goddess, but one who gu
             console.error('[RENDER] error:', e);
             bubbleDiv.textContent = fullText;
         }
+        try { applyHighlight(botMsgDiv); } catch(e) { console.error('[HLJS]', e); }
+        try { addCodeCopyButtons(botMsgDiv); } catch(e) { console.error('[COPY]', e); }
+        
+        // Footer + actions for streaming responses
+        const footerEl = document.createElement('div');
+        footerEl.className = 'msg-footer';
+        footerEl.innerHTML = '<span class="timestamp">just now</span>';
+        botMsgDiv.appendChild(footerEl);
+        
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'bot-actions';
+        actionsEl.innerHTML = `
+            <button class="action-btn" onclick="copyText(this, this.closest('.msg-row').dataset.fullText)">
+                <i data-lucide="copy" size="14"></i> Copy
+            </button>
+            <button class="action-btn" onclick="chat(true)">
+                <i data-lucide="refresh-cw" size="14"></i> Regenerate
+            </button>
+        `;
+        botMsgDiv.appendChild(actionsEl);
+        lucide.createIcons();
         
         botMsgDiv.dataset.fullText = fullText;
         
@@ -657,9 +891,14 @@ Maintain your divine yet approachable tone — you are a goddess, but one who gu
         conversationHistory.push({ role: "assistant", content: fullText });
         
         renderSidebar();
+        setSendIcon('arrow-up-circle');
+        currentAbortController = null;
         
     } catch(e) { 
         document.getElementById('typing-container').classList.add('hidden');
+        setSendIcon('arrow-up-circle');
+        currentAbortController = null;
+        if (e.name === 'AbortError') return;
         console.error('Chat error:', e);
         notify("Connection error. Check console for details."); 
     }
@@ -685,7 +924,7 @@ async function generateChatTitle(userPrompt) {
     }
 }
 
-function renderMsg(txt, sender) {
+function renderMsg(txt, sender, createdAt) {
     const div = document.createElement('div');
     div.className = `msg-row ${sender}`;
     
@@ -699,6 +938,8 @@ function renderMsg(txt, sender) {
         bubbleContent = marked.parse(txt);
     }
     
+    const timeHtml = createdAt ? `<span class="timestamp">${getRelativeTime(createdAt)}</span>` : '';
+    
     let actions = '';
     if (sender === 'bot') {
         div.dataset.fullText = txt;
@@ -711,10 +952,12 @@ function renderMsg(txt, sender) {
             </button>
         </div>`;
     }
-    div.innerHTML = `<div class="bubble">${bubbleContent}</div>${actions}`;
+    div.innerHTML = `<div class="bubble">${bubbleContent}</div><div class="msg-footer">${timeHtml}</div>${actions}`;
     document.getElementById('messages').appendChild(div);
     if (sender === 'bot') {
         lastBotMessageEl = div;
+        applyHighlight(div);
+        addCodeCopyButtons(div);
     }
     document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
     lucide.createIcons();
@@ -733,6 +976,63 @@ function copyText(btn, text) {
         console.error('Copy failed:', err);
         notify("Failed to copy text.");
     });
+}
+
+// --- MEMORY MANAGER ---
+function openMemoryModal() {
+  document.getElementById('memory-modal-overlay').style.display = 'flex';
+  renderMemoryList();
+  lucide.createIcons();
+}
+
+function closeMemoryModal() {
+  document.getElementById('memory-modal-overlay').style.display = 'none';
+}
+
+function renderMemoryList() {
+  const list = document.getElementById('memory-list');
+  if (userMemories.length === 0) {
+    list.innerHTML = '<div style="color:var(--text-muted); font-size:13px; text-align:center; padding:20px 0;">No memories yet.</div>';
+    return;
+  }
+  list.innerHTML = userMemories.map(m => `
+    <div class="memory-item">
+      <span class="memory-key">${escapeHtml(m.memory_key)}</span>
+      <span class="memory-value">${escapeHtml(m.memory_value)}</span>
+      <button class="memory-del-btn" onclick="deleteMemory('${escapeHtml(m.memory_key)}')"><i data-lucide="trash-2" size="14"></i></button>
+    </div>
+  `).join('');
+  lucide.createIcons();
+}
+
+async function addMemory() {
+  const key = document.getElementById('memory-key-input').value.trim();
+  const value = document.getElementById('memory-value-input').value.trim();
+  if (!key || !value) { notify("Fill in both fields"); return; }
+  
+  if (userMemories.find(m => m.memory_key === key)) {
+    notify("Memory key already exists");
+    return;
+  }
+  
+  const { error } = await sb.from('user_memory')
+    .insert([{ user_id: user.id, memory_key: key, memory_value: value }]);
+  if (error) { notify(error.message); return; }
+  
+  userMemories.push({ memory_key: key, memory_value: value });
+  document.getElementById('memory-key-input').value = '';
+  document.getElementById('memory-value-input').value = '';
+  renderMemoryList();
+  notify("Memory saved!");
+}
+
+async function deleteMemory(key) {
+  const { error } = await sb.from('user_memory')
+    .delete().eq('user_id', user.id).eq('memory_key', key);
+  if (error) { notify(error.message); return; }
+  userMemories = userMemories.filter(m => m.memory_key !== key);
+  renderMemoryList();
+  notify("Memory forgotten.");
 }
 
 // --- CONSTELLATION FOLDERS ---
@@ -793,6 +1093,11 @@ function renderSessionItem(item) {
   </div>`;
 }
 
+function onSearchInput() {
+  searchQuery = document.getElementById('search-input').value.toLowerCase().trim();
+  renderSidebar();
+}
+
 async function renderSidebar() {
   await loadConstellations();
   
@@ -809,6 +1114,13 @@ async function renderSidebar() {
   (data || []).forEach(item => {
     if (seen.has(item.chat_id)) return;
     seen.add(item.chat_id);
+    
+    // Apply search filter
+    if (searchQuery) {
+      const text = (item.message || '').toLowerCase();
+      if (!text.includes(searchQuery)) return;
+    }
+    
     if (item.constellation_id) {
       if (!grouped[item.constellation_id]) grouped[item.constellation_id] = [];
       grouped[item.constellation_id].push(item);
@@ -851,7 +1163,8 @@ function hideContextMenu() {
 function showSessionMenu(e, chatId) {
   hideContextMenu();
   const menu = document.getElementById('context-menu');
-  let html = '';
+  let html = `<div class="context-menu-item" onclick="event.stopPropagation(); hideContextMenu(); showRenameSessionModal('${chatId}')"><i data-lucide="pencil" size="14"></i> Rename</div>`;
+  html += `<div class="context-menu-divider"></div>`;
   for (const c of constellations) {
     html += `<div class="context-menu-item" onclick="event.stopPropagation(); moveSessionToConstellation('${chatId}', '${c.id}'); hideContextMenu();"><i data-lucide="folder" size="14"></i> Move to ${escapeHtml(c.name)}</div>`;
   }
@@ -916,10 +1229,33 @@ function showRenameModal(id) {
   setTimeout(() => document.getElementById('rename-input').focus(), 100);
 }
 
+function showRenameSessionModal(chatId) {
+  isNewConstellation = false;
+  isSessionRename = true;
+  renameTargetId = chatId;
+  document.getElementById('rename-input').value = '';
+  document.getElementById('rename-modal-title').textContent = 'Rename Session';
+  document.getElementById('rename-confirm-btn').textContent = 'Rename';
+  document.getElementById('rename-modal-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('rename-input').focus(), 100);
+}
+
+async function renameSession(chatId, newTitle) {
+  const { data } = await sb.from('chat_history')
+    .select('id').eq('chat_id', chatId).eq('sender', 'title').limit(1);
+  if (data && data.length) {
+    await sb.from('chat_history').update({ message: `🌙 ${newTitle}` }).eq('id', data[0].id);
+  } else {
+    await sb.from('chat_history').insert([{ user_id: user.id, chat_id: chatId, message: `🌙 ${newTitle}`, sender: 'title' }]);
+  }
+  renderSidebar();
+}
+
 function closeRenameModal() {
   document.getElementById('rename-modal-overlay').style.display = 'none';
   renameTargetId = null;
   isNewConstellation = false;
+  isSessionRename = false;
 }
 
 function confirmRenameOrCreate() {
@@ -927,6 +1263,8 @@ function confirmRenameOrCreate() {
   if (!name) return;
   if (isNewConstellation) {
     createConstellation(name);
+  } else if (isSessionRename && renameTargetId) {
+    renameSession(renameTargetId, name);
   } else if (renameTargetId) {
     renameConstellation(renameTargetId, name);
   }
@@ -947,7 +1285,7 @@ async function loadSession(id) {
     data?.forEach(m => {
         if (m.sender === 'title') return;
         try {
-            renderMsg(m.message, m.sender);
+            renderMsg(m.message, m.sender, m.created_at);
             if (m.sender === 'user') {
                 const content = isMultimodalMsg(m.message) ? JSON.parse(m.message).content : m.message;
                 conversationHistory.push({ role: 'user', content });
