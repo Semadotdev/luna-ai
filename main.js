@@ -120,6 +120,7 @@ let isListening = false;
 let voiceManualStop = false;
 let voiceTriggerStop = false;
 let voiceRetryCount = 0;
+let voiceRestartCount = 0;
 
 function playListeningChime() {
   try {
@@ -155,13 +156,11 @@ function toggleVoiceInput() {
     voiceRecognition.interimResults = true;
     voiceRecognition.lang = 'en-US';
     
-    voiceRecognition.onresult = (e) => {
+     voiceRecognition.onresult = (e) => {
       if (!isListening) return;
       const input = document.getElementById('userInput');
-      let transcript = '';
-      for (let i = 0; i < e.results.length; i++) {
-        transcript += e.results[i][0].transcript;
-      }
+      const last = e.results[e.results.length - 1];
+      const transcript = last[0].transcript;
       input.value = transcript;
       input.focus();
       if (/thank(s|\s+you)?[\s,.]*luna/i.test(transcript)) {
@@ -195,7 +194,8 @@ function toggleVoiceInput() {
         lucide.createIcons();
         return;
       }
-      if (isListening) {
+      if (isListening && voiceRestartCount < 2) {
+        voiceRestartCount++;
         setTimeout(() => {
           if (isListening && !voiceManualStop) voiceRecognition.start();
         }, 2000);
@@ -223,18 +223,13 @@ function toggleVoiceInput() {
   voiceManualStop = false;
   voiceTriggerStop = false;
   voiceRetryCount = 0;
+  voiceRestartCount = 0;
   playListeningChime();
   voiceRecognition.start();
   isListening = true;
   document.getElementById('mic-btn').classList.add('listening');
   const icon = document.getElementById('mic-btn').querySelector('[data-lucide]');
   icon.setAttribute('data-lucide', 'stop-circle');
-  
-  // Add listening badge
-  const badge = document.createElement('span');
-  badge.className = 'listening-badge';
-  badge.textContent = 'Listening...';
-  document.getElementById('mic-btn').appendChild(badge);
   
   lucide.createIcons();
 }
@@ -630,6 +625,28 @@ document.addEventListener('DOMContentLoaded', () => {
             window.history.replaceState(null, '', window.location.pathname);
         }
     })();
+    
+    // Auto-login if session exists (fresh tab, already logged in)
+    (async () => {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session?.user && !user) {
+            await initApp(session.user);
+        }
+    })();
+    
+    function initCrossTabSync() {
+        window.addEventListener('storage', async (e) => {
+            if (e.key !== 'supabase.auth.token') return;
+            await new Promise(r => setTimeout(r, 100));
+            const { data: { session } } = await sb.auth.getSession();
+            if (session && !user) {
+                await initApp(session.user);
+            } else if (!session && user) {
+                location.reload();
+            }
+        });
+    }
+    initCrossTabSync();
     
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {

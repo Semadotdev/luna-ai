@@ -233,7 +233,7 @@ body.light-mode .auth-card > [data-lucide]:first-child {
 
 /* --- INPUT AREA --- */
 #input-area { padding: 30px 18% 50px; }
-.input-wrapper { display: flex; align-items: center; background: var(--input-bg); border: 2px solid var(--border); border-radius: 20px; padding: 12px 8px 12px 4px; }
+.input-wrapper { display: flex; align-items: center; background: var(--input-bg); border: 2px solid var(--border); border-radius: 20px; padding: 6px 8px 6px 4px; }
 input { flex: 1; border: none; background: transparent; color: var(--text-main); outline: none; font-size: 16px; font-family: 'Inter', sans-serif; }
 
 /* --- FILE PREVIEW --- */
@@ -293,18 +293,6 @@ input { flex: 1; border: none; background: transparent; color: var(--text-main);
 #mic-btn.listening { color: var(--danger) !important; }
 #mic-btn.listening [data-lucide] { color: var(--danger); animation: pulse-mic 1.2s ease-in-out infinite; }
 @keyframes pulse-mic { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-.listening-badge {
-  position: absolute;
-  bottom: -18px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 9px;
-  color: var(--danger);
-  white-space: nowrap;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-}
-
 .hidden { display: none !important; }
 #toast { position: fixed; top: 20px; right: 20px; background: var(--primary); color: #fff; padding: 12px 20px; border-radius: 12px; transform: translateX(250%); transition: 0.4s; z-index: 9999; display: flex; align-items: center; gap: 8px; }
 #toast.show { transform: translateX(0); }
