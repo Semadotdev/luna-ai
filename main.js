@@ -162,7 +162,7 @@ function toggleVoiceInput() {
       const last = e.results[e.results.length - 1];
       const transcript = last[0].transcript;
       input.value = transcript;
-      input.focus();
+      if (!window.matchMedia('(pointer: coarse)').matches) input.focus();
       if (/thank(s|\s+you)?[\s,.]*luna/i.test(transcript)) {
         voiceTriggerStop = true;
         voiceManualStop = true;
