@@ -419,8 +419,19 @@ document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
 
     if (isRecoveryFlow) {
-        window.history.replaceState(null, '', window.location.pathname);
-        showResetPasswordPage();
+        (async () => {
+            const params = new URLSearchParams(initialHash.replace('#', '?'));
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
+            if (accessToken) {
+                await sb.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken
+                });
+            }
+            window.history.replaceState(null, '', window.location.pathname);
+            showResetPasswordPage();
+        })();
     }
 
     (async () => {
