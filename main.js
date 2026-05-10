@@ -31,6 +31,8 @@ let collapsedConstellations = new Set();
 let renameTargetId = null;
 let isNewConstellation = false;
 let currentConstellationId = null;
+const initialHash = window.location.hash;
+const isRecoveryFlow = initialHash.includes('type=recovery');
 
 function loadCollapsedState() {
   try {
@@ -221,7 +223,7 @@ async function handleSignUp() {
     const { error } = await sb.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: 'https://luna-ai-eight-woad.vercel.app' }
+        options: { emailRedirectTo: window.location.origin }
     });
     if (error) notify(error.message);
     else showConfirmationPage(email);
@@ -261,7 +263,7 @@ async function handleSendResetLink() {
     const email = v('forgot-email');
     if (!email) { notify("Enter your email first"); return; }
     const { error } = await sb.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://luna-ai-eight-woad.vercel.app'
+        redirectTo: window.location.origin
     });
     if (error) notify(error.message);
     else notify("Password reset link sent to your email!");
@@ -273,6 +275,8 @@ async function handleResetPassword() {
     if (!pass || !confirm) { notify("Fill in both fields"); return; }
     if (pass.length < 6) { notify("Password must be at least 6 characters"); return; }
     if (pass !== confirm) { notify("Passwords do not match"); return; }
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { notify("Session expired. Request a new reset link."); return; }
     const { error } = await sb.auth.updateUser({ password: pass });
     if (error) notify(error.message);
     else {
@@ -410,12 +414,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     lucide.createIcons();
 
+    if (isRecoveryFlow) {
+        window.history.replaceState(null, '', window.location.pathname);
+        showResetPasswordPage();
+    }
+
     (async () => {
         const hash = window.location.hash;
-        if (hash && hash.includes('type=recovery')) {
-            window.history.replaceState(null, '', window.location.pathname);
-            showResetPasswordPage();
-        } else if (hash && (hash.includes('access_token') || hash.includes('type=signup'))) {
+        if (hash && (hash.includes('access_token') || hash.includes('type=signup'))) {
             const { data: { session } } = await sb.auth.getSession();
             if (session?.user) initApp(session.user);
             window.history.replaceState(null, '', window.location.pathname);
