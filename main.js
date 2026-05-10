@@ -16,6 +16,9 @@ function closeSidebarOnMobile() {
     document.getElementById('sidebar').classList.remove('open');
 }
 
+const initialHash = window.location.hash;
+const isRecoveryFlow = initialHash.includes('type=recovery');
+
 const sb = supabase.createClient(SB_URL, SB_KEY);
 let user = null;
 let currentChatId = crypto.randomUUID();
@@ -31,8 +34,6 @@ let collapsedConstellations = new Set();
 let renameTargetId = null;
 let isNewConstellation = false;
 let currentConstellationId = null;
-const initialHash = window.location.hash;
-const isRecoveryFlow = initialHash.includes('type=recovery');
 
 function loadCollapsedState() {
   try {
