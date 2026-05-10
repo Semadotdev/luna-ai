@@ -1,13 +1,16 @@
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(__dirname));
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_KEY = process.env.GROQ_API_KEY;
@@ -19,8 +22,13 @@ app.get('/api/health', (req, res) => {
 app.post('/api/chat', async (req, res) => {
     try {
         const { messages, stream = true } = req.body;
+        const hasVision = messages.some(m =>
+            Array.isArray(m.content) && m.content.some(c => c.type === 'image_url')
+        );
+        const model = hasVision ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile';
+
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);
+        const timeout = setTimeout(() => controller.abort(), 30000);
         const response = await fetch(GROQ_API_URL, {
             method: 'POST',
             headers: {
@@ -28,7 +36,7 @@ app.post('/api/chat', async (req, res) => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: 'llama-3.3-70b-versatile',
+                model,
                 messages,
                 stream: stream
             }),
@@ -36,13 +44,12 @@ app.post('/api/chat', async (req, res) => {
         });
         clearTimeout(timeout);
 
-        // Check for non-200 response
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Groq API error:', response.status, errorText);
-            return res.status(response.status).json({ 
-                error: `Groq API error: ${response.status}`, 
-                details: errorText 
+            return res.status(response.status).json({
+                error: `Groq API error: ${response.status}`,
+                details: errorText
             });
         }
 
@@ -64,7 +71,6 @@ app.post('/api/chat', async (req, res) => {
                         res.write(chunk);
                     } catch (decodeError) {
                         console.error('Decode error:', decodeError);
-                        // Continue despite decode errors
                     }
                 }
             } finally {
@@ -79,6 +85,65 @@ app.post('/api/chat', async (req, res) => {
         if (!res.headersSent) {
             res.status(500).json({ error: 'Failed to fetch from Groq API', details: error.message });
         }
+    }
+});
+
+app.post('/api/extract-text', upload.single('file'), async (req, res) => {
+    try {
+        const file = req.file;
+        if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+        let text = '';
+        const name = file.originalname;
+
+        if (file.mimetype === 'application/pdf' || name.endsWith('.pdf')) {
+            const pdfParse = require('pdf-parse');
+            const data = await pdfParse(file.buffer);
+            text = data.text;
+        } else if (file.mimetype.includes('word') || name.endsWith('.docx')) {
+            const mammoth = require('mammoth');
+            const result = await mammoth.extractRawText({ buffer: file.buffer });
+            text = result.value;
+        } else if (file.mimetype.includes('text') || name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.csv') || name.endsWith('.json')) {
+            text = file.buffer.toString('utf-8');
+        } else {
+            return res.status(400).json({ error: `Unsupported file type: ${file.mimetype}` });
+        }
+
+        res.json({ text, filename: name });
+    } catch (error) {
+        console.error('Extract error:', error);
+        res.status(500).json({ error: 'Failed to extract text', details: error.message });
+    }
+});
+
+app.post('/api/transcribe', upload.single('file'), async (req, res) => {
+    try {
+        const file = req.file;
+        if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+        const formData = new FormData();
+        const blob = new Blob([file.buffer], { type: file.mimetype });
+        formData.append('file', blob, file.originalname);
+        formData.append('model', 'whisper-large-v3-turbo');
+        formData.append('response_format', 'json');
+
+        const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${GROQ_KEY}` },
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            return res.status(response.status).json({ error: errText });
+        }
+
+        const data = await response.json();
+        res.json({ text: data.text });
+    } catch (error) {
+        console.error('Transcribe error:', error);
+        res.status(500).json({ error: 'Transcription failed', details: error.message });
     }
 });
 

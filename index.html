@@ -39,8 +39,8 @@
             <i data-lucide="moon" size="64"></i>
             <h1>Luna</h1>
             <p class="auth-tagline">Intelligence That Shines.</p>
-            <input type="email" id="in-email" class="auth-input" placeholder="Email Address">
-            <input type="password" id="in-password" class="auth-input" placeholder="Password" style="color: var(--text-main);">
+            <input type="email" id="in-email" class="auth-input" placeholder="Email Address" onkeypress="if(event.key==='Enter') handleSignIn()">
+            <input type="password" id="in-password" class="auth-input" placeholder="Password" onkeypress="if(event.key==='Enter') handleSignIn()" style="color: var(--text-main);">
             <button class="btn-luna" onclick="handleSignIn()">Enter the Moonlight</button>
             <button onclick="toggleAuth(true)" style="background:none; border:none; color:var(--text-muted); margin-top:25px; cursor:pointer;">New here? <span style="color: var(--primary)">Join Luna</span></button>
         </div>
@@ -51,15 +51,15 @@
             <i data-lucide="sparkles" size="64"></i>
             <h1>Join Luna</h1>
             <p class="auth-tagline">Create your celestial ID.</p>
-            <input type="email" id="up-email" class="auth-input" placeholder="Email Address">
-            <input type="password" id="up-pass" class="auth-input" placeholder="Create Password" style="color: var(--text-main);">
+            <input type="email" id="up-email" class="auth-input" placeholder="Email Address" onkeypress="if(event.key==='Enter') handleSignUp()">
+            <input type="password" id="up-pass" class="auth-input" placeholder="Create Password" onkeypress="if(event.key==='Enter') handleSignUp()" style="color: var(--text-main);">
             <button class="btn-luna" onclick="handleSignUp()">Start Journey</button>
             <button onclick="toggleAuth(false)" style="background:none; border:none; color:var(--text-muted); margin-top:25px; cursor:pointer;">Already a member? <span style="color: var(--primary)">Login</span></button>
         </div>
     </div>
     
     <div id="sidebar" class="hidden">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 35px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <div style="font-weight: 900; color: var(--text-main); font-size: 28px; display: flex; align-items: center; gap: 12px; font-family: 'Comfortaa', cursive; letter-spacing: 0.5px;">
                 <i data-lucide="moon"></i> Luna
             </div>
@@ -68,7 +68,17 @@
             </button>
         </div>
         <button class="new-chat-btn" onclick="startNewSession(); closeSidebarOnMobile();">+ NEW SESSION</button>
-        <div id="history-list" style="flex:1; overflow-y:auto; margin-top:10px;"></div>
+        <button class="new-constellation-btn" onclick="showNewConstellationModal()">✦ NEW CONSTELLATION</button>
+        <div id="sidebar-scroll">
+            <div id="constellations-container"></div>
+            <div id="uncategorized-group">
+                <div class="constellation-header" style="cursor:default">
+                    <span class="collapse-icon"><i data-lucide="layers" size="14"></i></span>
+                    <span style="flex:1">Uncategorized</span>
+                </div>
+                <div id="uncategorized-list" class="constellation-sessions"></div>
+            </div>
+        </div>
         <div style="margin-top: auto; padding-top: 25px; border-top: 1px solid var(--border);">
             <button onclick="toggleTheme()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; gap:12px; font-size:14px; margin-bottom:15px;">
                 <i data-lucide="sun"></i> <span>Theme Mode</span>
@@ -76,6 +86,19 @@
             <button onclick="confirmSignOut()" style="background:none; border:none; color:var(--danger); cursor:pointer; display:flex; align-items:center; gap:12px; font-size:14px;">
                 <i data-lucide="log-out"></i> Sign Out
             </button>
+        </div>
+    </div>
+
+    <div id="context-menu" class="hidden"></div>
+
+    <div id="rename-modal-overlay">
+        <div class="modal">
+            <h3 id="rename-modal-title" style="color: var(--text-main)">Rename Constellation</h3>
+            <input type="text" id="rename-input" class="auth-input" placeholder="Constellation name" style="margin-top: 12px;" onkeypress="if(event.key==='Enter') confirmRenameOrCreate()">
+            <div class="modal-btns">
+                <button class="modal-btn" style="background:var(--border); color:var(--text-main)" onclick="closeRenameModal()">Cancel</button>
+                <button id="rename-confirm-btn" class="modal-btn" style="background:var(--primary); color:white" onclick="confirmRenameOrCreate()">Rename</button>
+            </div>
         </div>
     </div>
 
@@ -95,12 +118,25 @@
             <div id="typing-container" class="hidden">
                 <div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
             </div>
+            <input type="file" id="file-input" accept="image/*,.pdf,.docx,.txt,.csv,.md,.json,audio/*" multiple hidden>
+            <div id="file-preview" class="hidden"></div>
             <div class="input-wrapper">
+                <button id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach files" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:6px 4px; display:flex; align-items:center;">
+                    <i data-lucide="paperclip" size="20"></i>
+                </button>
                 <input type="text" id="userInput" placeholder="Illuminate a thought..." onkeypress="if(event.key==='Enter') chat()">
                 <button onclick="chat()" style="background:none; border:none; color:var(--primary); cursor:pointer;">
                     <i data-lucide="arrow-up-circle" size="36" fill="currentColor"></i>
                 </button>
             </div>
+        </div>
+    </div>
+
+    <div id="drop-overlay" class="hidden">
+        <div class="drop-content">
+            <i data-lucide="upload" size="48"></i>
+            <p>Drop files here</p>
+            <span>Images, PDFs, documents, audio</span>
         </div>
     </div>
 

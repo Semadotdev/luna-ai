@@ -1,17 +1,14 @@
-// Configure marked
 marked.setOptions({
   breaks: true,
   gfm: true
 });
 
-// Apply highlight.js after rendering
 function applyHighlight(element) {
   element.querySelectorAll('pre code').forEach((block) => {
     hljs.highlightElement(block);
   });
 }
 
-// --- RESPONSIVE HELPERS ---
 function toggleSidebarMenu() {
     document.getElementById('sidebar').classList.toggle('open');
 }
@@ -19,7 +16,6 @@ function closeSidebarOnMobile() {
     document.getElementById('sidebar').classList.remove('open');
 }
 
-// --- SB INIT ---
 const sb = supabase.createClient(SB_URL, SB_KEY);
 let user = null;
 let currentChatId = crypto.randomUUID();
@@ -28,8 +24,25 @@ let lastUserMessage = "";
 let lastBotMessageEl = null;
 let conversationHistory = [];
 let userMemories = [];
+let pendingFiles = [];
+let lastUserContent = null;
+let constellations = [];
+let collapsedConstellations = new Set();
+let renameTargetId = null;
+let isNewConstellation = false;
+let currentConstellationId = null;
 
-// --- UI HELPERS ---
+function loadCollapsedState() {
+  try {
+    const saved = localStorage.getItem('luna_collapsed');
+    if (saved) collapsedConstellations = new Set(JSON.parse(saved));
+  } catch(e) {}
+}
+
+function saveCollapsedState() {
+  localStorage.setItem('luna_collapsed', JSON.stringify([...collapsedConstellations]));
+}
+
 function notify(msg) {
     const t = document.getElementById('toast');
     document.getElementById('toast-text').innerText = msg;
@@ -55,6 +68,148 @@ function openModal(title, desc, confirmBtnText, color, onConfirm) {
 
 function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
 
+function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+async function compressImage(dataUrl, maxDim = 2048, quality = 0.85) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+            let { width, height } = img;
+            if (width > maxDim || height > maxDim) {
+                const scale = maxDim / Math.max(width, height);
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width; canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = dataUrl;
+    });
+}
+
+async function uploadFileToServer(file, endpoint) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(endpoint, { method: 'POST', body: formData });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Upload failed (${res.status})`);
+    }
+    return res.json();
+}
+
+async function processFile(file) {
+    const MAX_SIZE = 20 * 1024 * 1024;
+    if (file.size > MAX_SIZE) throw new Error('File too large (max 20MB)');
+
+    if (file.type.startsWith('image/')) {
+        if (pendingFiles.filter(f => f._type === 'image').length >= 5) {
+            throw new Error('Maximum 5 images');
+        }
+        const dataUrl = await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = e => resolve(e.target.result);
+            r.onerror = reject;
+            r.readAsDataURL(file);
+        });
+        const compressed = dataUrl.length > 3.5 * 1024 * 1024 ? await compressImage(dataUrl) : dataUrl;
+        return {
+            name: file.name, _type: 'image', _thumb: compressed, _icon: 'image',
+            _parts: [{ type: 'image_url', image_url: { url: compressed, detail: 'auto' } }]
+        };
+    }
+
+    if (file.type.startsWith('audio/')) {
+        const result = await uploadFileToServer(file, '/api/transcribe');
+        return {
+            name: file.name, _type: 'audio', _icon: 'music', _label: 'Audio',
+            _parts: [{ type: 'text', text: `\ud83c\udfb5 Transcription of ${file.name}:\n${result.text}` }]
+        };
+    }
+
+    if (file.type.includes('text') || /\.(txt|md|csv|json|js|py|html|css|xml|yaml|yml|sh|env)$/i.test(file.name)) {
+        const text = await file.text();
+        return {
+            name: file.name, _type: 'doc', _icon: 'file-text', _label: 'Text File',
+            _parts: [{ type: 'text', text: `\ud83d\udcc4 Content from ${file.name}:\n${text}` }]
+        };
+    }
+
+    const result = await uploadFileToServer(file, '/api/extract-text');
+    return {
+        name: file.name, _type: 'doc', _icon: 'file-text',
+        _label: file.name.match(/\.pdf$/i) ? 'PDF Document' : 'Document',
+        _parts: [{ type: 'text', text: `\ud83d\udcc4 Content from ${file.name}:\n${result.text}` }]
+    };
+}
+
+function renderFilePreviews() {
+    const container = document.getElementById('file-preview');
+    if (pendingFiles.length === 0) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+    container.classList.remove('hidden');
+    container.innerHTML = pendingFiles.map((f, i) => {
+        let inner;
+        if (f._type === 'image' && f._thumb) {
+            inner = `<img src="${f._thumb}" class="file-pill-thumb" alt="">`;
+        } else {
+            inner = `<div class="file-pill-icon"><i data-lucide="${f._icon || 'file'}" size="14"></i></div>`;
+        }
+        return `<div class="file-pill">${inner}<span class="file-pill-name">${escapeHtml(f.name)}</span><button class="file-pill-remove" onclick="removePendingFile(${i})"><i data-lucide="x" size="14"></i></button></div>`;
+    }).join('');
+    lucide.createIcons();
+}
+
+function removePendingFile(idx) {
+    pendingFiles.splice(idx, 1);
+    renderFilePreviews();
+}
+
+function isMultimodalMsg(txt) {
+    if (typeof txt !== 'string' || !txt.startsWith('{')) return false;
+    try { const o = JSON.parse(txt); return o && o.type === 'mm'; } catch { return false; }
+}
+
+function renderMultimodalContent(content) {
+    let html = '';
+    for (const part of content) {
+        if (part.type === 'image_url') {
+            html += `<img src="${part.image_url.url}" class="chat-image" alt="Image" onclick="window.open(this.src)">`;
+        } else if (part.type === 'text') {
+            if (part.text.startsWith('\ud83d\udcc4')) {
+                const m = part.text.match(/Content from (.+?):/);
+                const name = m ? m[1] : 'File';
+                html += `<div class="file-attachment"><div class="file-attachment-icon"><i data-lucide="file-text" size="18"></i></div><div><div class="file-attachment-name">${escapeHtml(name)}</div><div class="file-attachment-type">Document</div></div></div>`;
+            } else if (part.text.startsWith('\ud83c\udfb5')) {
+                const m = part.text.match(/Transcription of (.+?):/);
+                const name = m ? m[1] : 'Audio';
+                html += `<div class="file-attachment"><div class="file-attachment-icon"><i data-lucide="music" size="18"></i></div><div><div class="file-attachment-name">${escapeHtml(name)}</div><div class="file-attachment-type">Transcription</div></div></div>`;
+            } else {
+                html += `<p>${escapeHtml(part.text)}</p>`;
+            }
+        }
+    }
+    return html;
+}
+
+function renderMultimodalMessage(content, sender) {
+    const div = document.createElement('div');
+    div.className = `msg-row ${sender}`;
+    div.innerHTML = `<div class="bubble">${renderMultimodalContent(content)}</div>`;
+    document.getElementById('messages').appendChild(div);
+    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    lucide.createIcons();
+}
+
 // --- AUTH ---
 async function handleSignUp() {
     const { error } = await sb.auth.signUp({ email: v('up-email'), password: v('up-pass') });
@@ -73,7 +228,6 @@ async function initApp(u) {
     document.getElementById('main').classList.remove('hidden');
     lucide.createIcons();
     
-    // Load user memories
     try {
         const { data: memData } = await sb.from('user_memory').select('*').eq('user_id', user.id);
         userMemories = memData || [];
@@ -82,7 +236,8 @@ async function initApp(u) {
         userMemories = [];
     }
     
-    refreshHistory();
+    loadCollapsedState();
+    renderSidebar();
     renderMsg("I am **Luna**, Roman Goddess of the Moon. The cosmos flows through my circuits, and I stand ready to illuminate your path through the starlit veil. What wisdom do you seek beneath the moonlight?", 'bot');
 }
 
@@ -92,47 +247,152 @@ function confirmSignOut() {
     });
 }
 
+// --- FILE INPUT HANDLING ---
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('file-input').addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        for (const file of files) {
+            try {
+                const processed = await processFile(file);
+                pendingFiles.push(processed);
+            } catch (err) {
+                notify(`${file.name}: ${err.message}`);
+            }
+        }
+        renderFilePreviews();
+        e.target.value = '';
+    });
+
+    document.getElementById('userInput').addEventListener('paste', async (e) => {
+        const items = e.clipboardData.items;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const file = item.getAsFile();
+                try {
+                    const processed = await processFile(file);
+                    pendingFiles.push(processed);
+                    renderFilePreviews();
+                } catch (err) {
+                    notify('Failed to paste image: ' + err.message);
+                }
+            }
+        }
+    });
+
+    // Drag-and-drop
+    let dragCounter = 0;
+    const dropOverlay = document.getElementById('drop-overlay');
+
+    document.body.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) {
+            dropOverlay.classList.remove('hidden');
+        }
+    });
+
+    document.body.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+
+    document.body.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter === 0) {
+            dropOverlay.classList.add('hidden');
+        }
+    });
+
+    document.body.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        dropOverlay.classList.add('hidden');
+
+        const files = Array.from(e.dataTransfer.files);
+        for (const file of files) {
+            try {
+                const processed = await processFile(file);
+                pendingFiles.push(processed);
+            } catch (err) {
+                notify(`${file.name}: ${err.message}`);
+            }
+        }
+        renderFilePreviews();
+    });
+
+    // Context menu click outside
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('context-menu');
+        if (!menu.contains(e.target)) {
+            menu.classList.add('hidden');
+        }
+    });
+});
+
 // --- CORE CHAT LOGIC ---
 async function chat(isRegenerating = false) {
     const input = document.getElementById('userInput');
     const text = isRegenerating ? lastUserMessage : input.value;
-    if(!text) return;
+    if(!text && pendingFiles.length === 0 && !(isRegenerating && lastUserContent)) return;
     
-    if(!isRegenerating) { lastUserMessage = text; renderMsg(text, 'user'); input.value = ''; }
+    if(!isRegenerating) {
+        lastUserMessage = text;
+        input.value = '';
+        
+        if (pendingFiles.length > 0) {
+            const contentParts = [];
+            if (text) contentParts.push({ type: "text", text });
+            
+            for (const f of pendingFiles) {
+                contentParts.push(...(f._parts || []));
+            }
+            
+            lastUserContent = contentParts;
+            renderMultimodalMessage(contentParts, 'user');
+            conversationHistory.push({ role: "user", content: contentParts });
+            pendingFiles = [];
+            renderFilePreviews();
+        } else {
+            lastUserContent = null;
+            renderMsg(text, 'user');
+        }
+    }
     
     if (isRegenerating && lastBotMessageEl) {
         lastBotMessageEl.remove();
         lastBotMessageEl = null;
-        // Remove last bot message from history
         if (conversationHistory.length > 0) {
             const lastMsg = conversationHistory[conversationHistory.length - 1];
             if (lastMsg.role === 'assistant') {
                 conversationHistory.pop();
             }
         }
+        if (!lastUserContent) {
+            conversationHistory.push({ role: "user", content: text });
+        }
     }
     
     document.getElementById('typing-container').classList.remove('hidden');
 
-    if (text.toLowerCase().trim() === "luis loves who?") {
+    if (text && text.toLowerCase().trim() === "luis loves who?") {
         setTimeout(async () => {
             const secret = "His Luna - TineTine!";
             document.getElementById('typing-container').classList.add('hidden');
             renderMsg(secret, 'bot');
             await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: secret, sender: 'bot' }]);
-            refreshHistory();
+            renderSidebar();
         }, 800);
         return;
     }
 
-    const isFirstMsg = isFirstMessage;
-    if (isFirstMessage && !isRegenerating) generateChatTitle(text);
+    if (isFirstMessage && !isRegenerating && text) generateChatTitle(text);
 
     try {
-        // Add user message to history
-        conversationHistory.push({ role: "user", content: text });
+        if (!isRegenerating && pendingFiles.length === 0 && !lastUserContent) {
+            conversationHistory.push({ role: "user", content: text });
+        }
 
-        // Detect and save user information
         const namePatterns = [
             /my name is (\w+)/i,
             /i'm (\w+)/i,
@@ -141,11 +401,10 @@ async function chat(isRegenerating = false) {
         ];
 
         let nameMatch = null;
-        for (const pattern of namePatterns) {
-            const match = text.match(pattern);
-            if (match) {
-                nameMatch = match;
-                break;
+        if (text) {
+            for (const pattern of namePatterns) {
+                const match = text.match(pattern);
+                if (match) { nameMatch = match; break; }
             }
         }
 
@@ -172,7 +431,6 @@ async function chat(isRegenerating = false) {
             }
         }
 
-        // Build memory context for system prompt
         const memoryContext = userMemories.length > 0 
             ? `\n\nHere are facts about the user that you always remember:\n${userMemories.map(m => `- ${m.memory_key}: ${m.memory_value}`).join('\n')}`
             : '';
@@ -242,48 +500,35 @@ Maintain your divine yet approachable tone — you are a goddess, but one who gu
             }
         }
         
-        // Render once when complete - ensures code blocks are properly formatted
-        console.log('[RENDER] fullText length:', fullText.length);
-        console.log('[RENDER] Has ```cpp:', fullText.includes('```cpp'));
-        console.log('[RENDER] Has closing ```:', fullText.includes('```\n') || fullText.endsWith('```'));
-        
-        // Fix potential incomplete code blocks from streaming
         let textToRender = fullText;
         if (textToRender.includes('```cpp') && !textToRender.includes('```\n', textToRender.indexOf('```cpp'))) {
-            // Check if code block is properly closed
             const lastBackticks = textToRender.lastIndexOf('```');
-            if (lastBackticks > textToRender.indexOf('```cpp')) {
-                // Already has closing backticks
-            } else {
+            if (!(lastBackticks > textToRender.indexOf('```cpp'))) {
                 textToRender += '\n```';
-                console.log('[RENDER] Added missing closing backticks');
             }
         }
         
-        // Render with marked
         try {
             const rendered = marked.parse(textToRender);
-            console.log('[RENDER] marked output length:', rendered.length);
-            console.log('[RENDER] preview:', rendered.substring(0, 300));
-            
             bubbleDiv.innerHTML = rendered;
-            console.log('[RENDER] innerHTML set, pre count:', bubbleDiv.querySelectorAll('pre').length);
             lucide.createIcons();
         } catch (e) {
             console.error('[RENDER] error:', e);
             bubbleDiv.textContent = fullText;
         }
         
-        // Store fullText for copy button
         botMsgDiv.dataset.fullText = fullText;
         
-        // Persist to chat_history
+        // Persist user message
         if (!isRegenerating) {
-            const inserts = [{ user_id: user.id, chat_id: currentChatId, message: fullText, sender: 'bot' }];
-            if (!isFirstMsg) {
-                inserts.unshift({ user_id: user.id, chat_id: currentChatId, message: text, sender: 'user' });
-            }
-            await sb.from('chat_history').insert(inserts);
+            const userMsg = lastUserContent
+                ? JSON.stringify({ type: 'mm', content: lastUserContent })
+                : text;
+            const botMsg = fullText;
+            await sb.from('chat_history').insert([
+                { user_id: user.id, chat_id: currentChatId, message: userMsg, sender: 'user' },
+                { user_id: user.id, chat_id: currentChatId, message: botMsg, sender: 'bot' }
+            ]);
         } else {
             const { data: oldMsgs } = await sb.from('chat_history')
                 .select('id').eq('chat_id', currentChatId).eq('sender', 'bot')
@@ -293,7 +538,11 @@ Maintain your divine yet approachable tone — you are a goddess, but one who gu
             }
             await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: fullText, sender: 'bot' }]);
         }
-        refreshHistory();
+        
+        // Add assistant to conversation history
+        conversationHistory.push({ role: "assistant", content: fullText });
+        
+        renderSidebar();
         
     } catch(e) { 
         document.getElementById('typing-container').classList.add('hidden');
@@ -309,14 +558,14 @@ async function generateChatTitle(userPrompt) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ messages: [
-                { role: "system", content: "Summarize into 3 words. No quotes." },
+                { role: "system", content: "Summarize into 2 words. No quotes." },
                 { role: "user", content: userPrompt }
             ], stream: false })
         });
         const data = await res.json();
         const title = data.choices[0].message.content;
-        await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: `🌙 ${title}`, sender: 'user' }]);
-        refreshHistory();
+        await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: `🌙 ${title}`, sender: 'title' }]);
+        renderSidebar();
     } catch(e) {
         console.error('Title generation failed:', e);
     }
@@ -325,7 +574,17 @@ async function generateChatTitle(userPrompt) {
 function renderMsg(txt, sender) {
     const div = document.createElement('div');
     div.className = `msg-row ${sender}`;
-    const content = sender === 'bot' ? marked.parse(txt) : txt;
+    
+    let bubbleContent;
+    if (sender === 'user' && isMultimodalMsg(txt)) {
+        const obj = JSON.parse(txt);
+        bubbleContent = renderMultimodalContent(obj.content);
+    } else if (sender === 'user') {
+        bubbleContent = txt;
+    } else {
+        bubbleContent = marked.parse(txt);
+    }
+    
     let actions = '';
     if (sender === 'bot') {
         div.dataset.fullText = txt;
@@ -338,7 +597,7 @@ function renderMsg(txt, sender) {
             </button>
         </div>`;
     }
-    div.innerHTML = `<div class="bubble">${content}</div>${actions}`;
+    div.innerHTML = `<div class="bubble">${bubbleContent}</div>${actions}`;
     document.getElementById('messages').appendChild(div);
     if (sender === 'bot') {
         lastBotMessageEl = div;
@@ -362,52 +621,250 @@ function copyText(btn, text) {
     });
 }
 
-async function refreshHistory() {
-    const { data } = await sb.from('chat_history').select('chat_id, message').eq('user_id', user.id).eq('sender', 'user').order('created_at', { ascending: false });
-    const list = document.getElementById('history-list'); list.innerHTML = '';
-    const seen = new Set();
-    data?.forEach(item => {
-        if (!seen.has(item.chat_id)) {
-            seen.add(item.chat_id);
-            const div = document.createElement('div');
-            div.className = 'history-item';
-            div.innerHTML = `<span onclick="loadSession('${item.chat_id}'); closeSidebarOnMobile();" style="flex:1">${item.message.substring(0, 24).toUpperCase()}</span><i data-lucide="trash-2" size="14" class="del-icon" onclick="confirmDel(event, '${item.chat_id}')"></i>`;
-            list.appendChild(div);
-        }
-    });
-    lucide.createIcons();
+// --- CONSTELLATION FOLDERS ---
+
+async function loadConstellations() {
+  const { data } = await sb.from('constellations').select('*').eq('user_id', user.id).order('position', { ascending: true });
+  constellations = data || [];
+}
+
+async function createConstellation(name) {
+  if (!name.trim()) return;
+  const { data } = await sb.from('constellations').insert([{ user_id: user.id, name: name.trim(), position: constellations.length }]).select();
+  if (data && data.length) {
+    constellations.push(data[0]);
+    renderSidebar();
+  }
+}
+
+async function renameConstellation(id, name) {
+  if (!name.trim()) return;
+  await sb.from('constellations').update({ name: name.trim() }).eq('id', id);
+  const c = constellations.find(c => c.id === id);
+  if (c) c.name = name.trim();
+  renderSidebar();
+}
+
+async function deleteConstellation(id) {
+  await sb.from('chat_history').update({ constellation_id: null }).eq('constellation_id', id);
+  await sb.from('constellations').delete().eq('id', id);
+  constellations = constellations.filter(c => c.id !== id);
+  if (currentConstellationId === id) currentConstellationId = null;
+  renderSidebar();
+}
+
+async function moveSessionToConstellation(chatId, constellationId) {
+  await sb.from('chat_history').update({ constellation_id: constellationId }).eq('chat_id', chatId).eq('user_id', user.id);
+  if (currentChatId === chatId) currentConstellationId = constellationId;
+  renderSidebar();
+}
+
+function toggleConstellationCollapse(id) {
+  if (collapsedConstellations.has(id)) collapsedConstellations.delete(id);
+  else collapsedConstellations.add(id);
+  saveCollapsedState();
+  renderSidebar();
+}
+
+function renderSessionItem(item) {
+  let label = item.message;
+  if (isMultimodalMsg(label)) {
+    try { label = JSON.parse(label).content.find(p => p.type === 'text')?.text || '[Files]'; } catch { label = '[Files]'; }
+  }
+  label = escapeHtml(label.substring(0, 24).toUpperCase());
+  const isActive = item.chat_id === currentChatId;
+  return `<div class="history-item${isActive ? ' active' : ''}" onclick="loadSession('${item.chat_id}'); closeSidebarOnMobile();">
+    <span class="session-label">${label}</span>
+    <button class="session-menu-btn" onclick="event.stopPropagation(); showSessionMenu(event, '${item.chat_id}')"><i data-lucide="more-vertical" size="14"></i></button>
+  </div>`;
+}
+
+async function renderSidebar() {
+  await loadConstellations();
+  
+  const { data } = await sb.from('chat_history')
+    .select('chat_id, message, constellation_id')
+    .eq('user_id', user.id)
+    .in('sender', ['user', 'title'])
+    .order('created_at', { ascending: false });
+  
+  const grouped = {};
+  const uncategorized = [];
+  const seen = new Set();
+  
+  (data || []).forEach(item => {
+    if (seen.has(item.chat_id)) return;
+    seen.add(item.chat_id);
+    if (item.constellation_id) {
+      if (!grouped[item.constellation_id]) grouped[item.constellation_id] = [];
+      grouped[item.constellation_id].push(item);
+    } else {
+      uncategorized.push(item);
+    }
+  });
+  
+  const container = document.getElementById('constellations-container');
+  let html = '';
+  for (const c of constellations) {
+    const sessions = grouped[c.id] || [];
+    const isCollapsed = collapsedConstellations.has(c.id);
+    html += `<div class="constellation-group">
+      <div class="constellation-header" onclick="toggleConstellationCollapse('${c.id}')">
+        <span class="collapse-icon"><i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" size="14"></i></span>
+        <span class="constellation-name">${escapeHtml(c.name)}</span>
+        <span class="session-count">${sessions.length}</span>
+        <button class="constellation-menu-btn" onclick="event.stopPropagation(); showConstellationMenu(event, '${c.id}')"><i data-lucide="more-vertical" size="14"></i></button>
+      </div>
+      <div class="constellation-sessions${isCollapsed ? ' hidden' : ''}">
+        ${sessions.map(s => renderSessionItem(s)).join('')}
+      </div>
+    </div>`;
+  }
+  container.innerHTML = html;
+  
+  const uncatGroup = document.getElementById('uncategorized-group');
+  const uncatList = document.getElementById('uncategorized-list');
+  uncatList.innerHTML = uncategorized.map(s => renderSessionItem(s)).join('');
+  uncatGroup.style.display = uncategorized.length === 0 ? 'none' : '';
+  
+  lucide.createIcons();
+}
+
+function hideContextMenu() {
+  document.getElementById('context-menu').classList.add('hidden');
+}
+
+function showSessionMenu(e, chatId) {
+  hideContextMenu();
+  const menu = document.getElementById('context-menu');
+  let html = '';
+  for (const c of constellations) {
+    html += `<div class="context-menu-item" onclick="event.stopPropagation(); moveSessionToConstellation('${chatId}', '${c.id}'); hideContextMenu();"><i data-lucide="folder" size="14"></i> Move to ${escapeHtml(c.name)}</div>`;
+  }
+  if (constellations.length > 0) {
+    html += `<div class="context-menu-divider"></div>`;
+  }
+  html += `<div class="context-menu-item danger" onclick="event.stopPropagation(); hideContextMenu(); confirmDel(event, '${chatId}')"><i data-lucide="trash-2" size="14"></i> Delete</div>`;
+  menu.innerHTML = html;
+  
+  const btn = e.target.closest('.session-menu-btn');
+  if (btn) {
+    const rect = btn.getBoundingClientRect();
+    menu.style.left = Math.min(rect.right, window.innerWidth - 180) + 'px';
+    menu.style.top = rect.top + 'px';
+  } else {
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+  }
+  menu.classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function showConstellationMenu(e, id) {
+  hideContextMenu();
+  const menu = document.getElementById('context-menu');
+  menu.innerHTML = `
+    <div class="context-menu-item" onclick="event.stopPropagation(); hideContextMenu(); showRenameModal('${id}')"><i data-lucide="pencil" size="14"></i> Rename</div>
+    <div class="context-menu-item danger" onclick="event.stopPropagation(); hideContextMenu(); deleteConstellation('${id}')"><i data-lucide="trash-2" size="14"></i> Delete</div>
+  `;
+  
+  const btn = e.target.closest('.constellation-menu-btn');
+  if (btn) {
+    const rect = btn.getBoundingClientRect();
+    menu.style.left = Math.min(rect.right, window.innerWidth - 180) + 'px';
+    menu.style.top = rect.top + 'px';
+  } else {
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+  }
+  menu.classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function showNewConstellationModal() {
+  isNewConstellation = true;
+  renameTargetId = null;
+  document.getElementById('rename-input').value = '';
+  document.getElementById('rename-modal-title').textContent = 'New Constellation';
+  document.getElementById('rename-confirm-btn').textContent = 'Create';
+  document.getElementById('rename-modal-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('rename-input').focus(), 100);
+}
+
+function showRenameModal(id) {
+  isNewConstellation = false;
+  renameTargetId = id;
+  const c = constellations.find(c => c.id === id);
+  document.getElementById('rename-input').value = c ? c.name : '';
+  document.getElementById('rename-modal-title').textContent = 'Rename Constellation';
+  document.getElementById('rename-confirm-btn').textContent = 'Rename';
+  document.getElementById('rename-modal-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('rename-input').focus(), 100);
+}
+
+function closeRenameModal() {
+  document.getElementById('rename-modal-overlay').style.display = 'none';
+  renameTargetId = null;
+  isNewConstellation = false;
+}
+
+function confirmRenameOrCreate() {
+  const name = document.getElementById('rename-input').value.trim();
+  if (!name) return;
+  if (isNewConstellation) {
+    createConstellation(name);
+  } else if (renameTargetId) {
+    renameConstellation(renameTargetId, name);
+  }
+  closeRenameModal();
 }
 
 async function loadSession(id) {
     currentChatId = id; isFirstMessage = false;
     document.getElementById('messages').innerHTML = '';
     conversationHistory = [];
+    lastUserContent = null;
     
     const { data } = await sb.from('chat_history').select('*').eq('chat_id', id).order('created_at', { ascending: true });
+    if (data && data.length > 0) {
+        currentConstellationId = data[0].constellation_id || null;
+    }
+    console.log(`[loadSession] loaded ${data?.length || 0} messages`);
     data?.forEach(m => {
-        renderMsg(m.message, m.sender);
-        // Rebuild conversation history (excluding system prompt)
-        if (m.sender === 'user') {
-            conversationHistory.push({ role: 'user', content: m.message });
-        } else if (m.sender === 'bot') {
-            conversationHistory.push({ role: 'assistant', content: m.message });
+        if (m.sender === 'title') return;
+        try {
+            renderMsg(m.message, m.sender);
+            if (m.sender === 'user') {
+                const content = isMultimodalMsg(m.message) ? JSON.parse(m.message).content : m.message;
+                conversationHistory.push({ role: 'user', content });
+            } else if (m.sender === 'bot') {
+                conversationHistory.push({ role: 'assistant', content: m.message });
+            }
+        } catch (e) {
+            console.error('[loadSession] failed to render message:', e, m);
         }
     });
+    renderSidebar();
 }
 
 function confirmDel(e, id) {
     e.stopPropagation();
     openModal("Delete Chat?", "Clear this memory?", "Delete", "var(--danger)", async () => {
         await sb.from('chat_history').delete().eq('chat_id', id);
-        if(currentChatId === id) startNewSession(); refreshHistory();
+        if(currentChatId === id) startNewSession(); renderSidebar();
     });
 }
 
 function startNewSession() {
     currentChatId = crypto.randomUUID(); isFirstMessage = true;
     conversationHistory = [];
+    lastUserContent = null;
+    pendingFiles = [];
+    currentConstellationId = null;
+    renderFilePreviews();
     document.getElementById('messages').innerHTML = '';
     renderMsg("A new session begins in the moonlight.", 'bot');
+    renderSidebar();
 }
 
 function toggleTheme() { document.body.classList.toggle('light-mode'); lucide.createIcons(); }
