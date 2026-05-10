@@ -436,7 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     (async () => {
         const hash = window.location.hash;
-        if (hash && (hash.includes('access_token') || hash.includes('type=signup'))) {
+        if (!isRecoveryFlow && hash && (hash.includes('access_token') || hash.includes('type=signup'))) {
             const { data: { session } } = await sb.auth.getSession();
             if (session?.user) initApp(session.user);
             window.history.replaceState(null, '', window.location.pathname);
