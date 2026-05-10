@@ -276,11 +276,14 @@ async function handleResetPassword() {
     if (!pass || !confirm) { notify("Fill in both fields"); return; }
     if (pass.length < 6) { notify("Password must be at least 6 characters"); return; }
     if (pass !== confirm) { notify("Passwords do not match"); return; }
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) { notify("Session expired. Request a new reset link."); return; }
     const { error } = await sb.auth.updateUser({ password: pass });
-    if (error) notify(error.message);
-    else {
+    if (error) {
+        if (error.message?.toLowerCase().includes('session') || error.status === 401) {
+            notify("Session expired. Request a new reset link.");
+        } else {
+            notify(error.message);
+        }
+    } else {
         notify("Password updated! Sign in with your new password.");
         toggleAuth(false);
     }
