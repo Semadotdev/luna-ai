@@ -115,12 +115,19 @@ function getRelativeTime(dateStr) {
 }
 
 // --- VOICE INPUT ---
+// Desktop: SpeechRecognition API
 let voiceRecognition = null;
+let voiceRetryCount = 0;
+let voiceRestartCount = 0;
+
+// Mobile: getUserMedia + Whisper
+let voiceStream = null;
+let voiceRecorder = null;
+let voiceChunks = [];
+
 let isListening = false;
 let voiceManualStop = false;
 let voiceTriggerStop = false;
-let voiceRetryCount = 0;
-let voiceRestartCount = 0;
 
 function playListeningChime() {
   try {
@@ -138,100 +145,223 @@ function playListeningChime() {
   } catch(e) {}
 }
 
+function voiceCleanupUI() {
+  voiceManualStop = false;
+  isListening = false;
+  document.getElementById('mic-btn').classList.remove('listening');
+  document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'mic');
+  lucide.createIcons();
+}
+
 function toggleVoiceInput() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) { notify("Voice input not supported in this browser."); return; }
-  
+  const isTouch = window.matchMedia('(pointer: coarse)').matches;
+
   if (isListening) {
     voiceManualStop = true;
     voiceTriggerStop = false;
     isListening = false;
-    voiceRecognition.stop();
+    if (isTouch) {
+      if (voiceRecorder && voiceRecorder.state !== 'inactive') {
+        voiceRecorder.stop();
+      }
+    } else {
+      voiceRecognition.stop();
+    }
     return;
   }
-  
-  if (!voiceRecognition) {
-    voiceRecognition = new SpeechRecognition();
-    voiceRecognition.continuous = true;
-    voiceRecognition.interimResults = true;
-    voiceRecognition.lang = 'en-US';
-    
-     voiceRecognition.onresult = (e) => {
-      if (!isListening) return;
-      const input = document.getElementById('userInput');
-      const last = e.results[e.results.length - 1];
-      const transcript = last[0].transcript;
-      input.value = transcript;
-      if (!window.matchMedia('(pointer: coarse)').matches) input.focus();
-      if (/thank(s|\s+you)?[\s,.]*luna/i.test(transcript)) {
-        voiceTriggerStop = true;
-        voiceManualStop = true;
-        isListening = false;
-        let cleanText = transcript.replace(/thank(s|\s+you)?[\s,.]*luna/gi, '').trim();
-        document.getElementById('userInput').value = cleanText;
-        voiceRecognition.stop();
-        return;
-      }
-    };
-    
-    voiceRecognition.onend = () => {
-      if (voiceManualStop) {
-        if (voiceTriggerStop) {
-          voiceTriggerStop = false;
-          const input = document.getElementById('userInput');
-          if (input.value.trim()) {
-            notify("Luna heard you ✨");
-            chat();
-          }
-        }
-        voiceManualStop = false;
-        isListening = false;
-        document.getElementById('mic-btn').classList.remove('listening');
-        document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'mic');
-        if (document.querySelector('#mic-btn .listening-badge')) {
-          document.querySelector('#mic-btn .listening-badge').remove();
-        }
-        lucide.createIcons();
-        return;
-      }
-      if (isListening && voiceRestartCount < 2) {
-        voiceRestartCount++;
-        setTimeout(() => {
-          if (isListening && !voiceManualStop) voiceRecognition.start();
-        }, 2000);
-      }
-    };
-    
-    voiceRecognition.onerror = (e) => {
-      if (e.error === 'no-speech') return;
-      if (e.error === 'network') {
-        voiceRetryCount++;
-        if (voiceRetryCount > 3) {
+
+  if (!isTouch) {
+    // === Desktop: native SpeechRecognition ===
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { notify("Voice input not supported."); return; }
+
+    if (!voiceRecognition) {
+      voiceRecognition = new SpeechRecognition();
+      voiceRecognition.continuous = true;
+      voiceRecognition.interimResults = true;
+      voiceRecognition.lang = 'en-US';
+
+      voiceRecognition.onresult = (e) => {
+        if (!isListening) return;
+        const input = document.getElementById('userInput');
+        const last = e.results[e.results.length - 1];
+        const transcript = last[0].transcript;
+
+        if (/forget\s+it[\s,.]*luna/i.test(transcript)) {
+          input.value = '';
+          notify("As you wish.");
           voiceManualStop = true;
-          voiceTriggerStop = false;
           isListening = false;
           voiceRecognition.stop();
-          notify("Voice network issue. Click mic to retry.");
+          voiceCleanupUI();
+          return;
         }
-        return;
-      }
-      notify("Voice input error: " + e.error);
-      voiceRecognition.stop();
-    };
+
+        if (input.value.length === 0 || transcript.startsWith(input.value)) {
+          input.value = transcript;
+        }
+
+        if (/thank(s|\s+you)?[\s,.]*luna/i.test(transcript)) {
+          voiceTriggerStop = true;
+          voiceManualStop = true;
+          isListening = false;
+          let cleanText = transcript.replace(/thank(s|\s+you)?[\s,.]*luna/gi, '').trim();
+          document.getElementById('userInput').value = cleanText;
+          voiceRecognition.stop();
+          return;
+        }
+      };
+
+      voiceRecognition.onend = () => {
+        if (voiceManualStop) {
+          if (voiceTriggerStop) {
+            voiceTriggerStop = false;
+            const input = document.getElementById('userInput');
+            if (input.value.trim()) {
+              notify("Luna heard you \u2728");
+              chat();
+            }
+          }
+          voiceCleanupUI();
+          return;
+        }
+        if (isListening && voiceRestartCount < 2) {
+          voiceRestartCount++;
+          setTimeout(() => {
+            if (isListening && !voiceManualStop) voiceRecognition.start();
+          }, 2000);
+        }
+      };
+
+      voiceRecognition.onerror = (e) => {
+        if (e.error === 'no-speech') return;
+        if (e.error === 'network') {
+          voiceRetryCount++;
+          if (voiceRetryCount > 3) {
+            voiceManualStop = true;
+            voiceTriggerStop = false;
+            isListening = false;
+            voiceRecognition.stop();
+            notify("Voice network issue. Click mic to retry.");
+          }
+          return;
+        }
+        notify("Voice input error: " + e.error);
+        voiceRecognition.stop();
+      };
+    }
+
+    voiceRetryCount = 0;
+    voiceRestartCount = 0;
+    playListeningChime();
+    voiceRecognition.start();
+    isListening = true;
+    voiceManualStop = false;
+    voiceTriggerStop = false;
+    document.getElementById('mic-btn').classList.add('listening');
+    document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'stop-circle');
+    lucide.createIcons();
+    return;
   }
-  
-  voiceManualStop = false;
-  voiceTriggerStop = false;
-  voiceRetryCount = 0;
-  voiceRestartCount = 0;
-  playListeningChime();
-  voiceRecognition.start();
-  isListening = true;
-  document.getElementById('mic-btn').classList.add('listening');
-  const icon = document.getElementById('mic-btn').querySelector('[data-lucide]');
-  icon.setAttribute('data-lucide', 'stop-circle');
-  
-  lucide.createIcons();
+
+  // === Mobile: getUserMedia + Whisper ===
+  (async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true }
+      });
+      voiceStream = stream;
+
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const highpass = audioCtx.createBiquadFilter();
+      highpass.type = 'highpass';
+      highpass.frequency.value = 80;
+      const lowpass = audioCtx.createBiquadFilter();
+      lowpass.type = 'lowpass';
+      lowpass.frequency.value = 4000;
+      const compressor = audioCtx.createDynamicsCompressor();
+      const dest = audioCtx.createMediaStreamDestination();
+
+      source.connect(highpass);
+      highpass.connect(lowpass);
+      lowpass.connect(compressor);
+      compressor.connect(dest);
+
+      voiceRecorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm' });
+      voiceChunks = [];
+
+      voiceRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) voiceChunks.push(e.data);
+      };
+
+      voiceRecorder.onstop = async () => {
+        // Clean up stream and context
+        if (voiceStream) {
+          voiceStream.getTracks().forEach(t => t.stop());
+          voiceStream = null;
+        }
+        audioCtx.close();
+
+        if (voiceChunks.length === 0) {
+          voiceCleanupUI();
+          return;
+        }
+
+        const blob = new Blob(voiceChunks, { type: 'audio/webm' });
+        voiceChunks = [];
+
+        try {
+          const fd = new FormData();
+          fd.append('file', blob, 'recording.webm');
+          const res = await fetch('/api/transcribe', { method: 'POST', body: fd });
+          const data = await res.json();
+
+          if (data.text) {
+            const text = data.text.trim();
+            const input = document.getElementById('userInput');
+
+            if (/forget\s+it[\s,.]*luna/i.test(text)) {
+              input.value = '';
+              notify("As you wish.");
+              voiceCleanupUI();
+              return;
+            }
+
+            if (/thank(s|\s+you)?[\s,.]*luna/i.test(text)) {
+              const clean = text.replace(/thank(s|\s+you)?[\s,.]*luna/gi, '').trim();
+              input.value = clean;
+              voiceTriggerStop = true;
+              if (clean) {
+                notify("Luna heard you \u2728");
+                chat();
+              }
+            } else {
+              input.value = text;
+            }
+          } else {
+            notify("Couldn't catch that");
+          }
+        } catch(e) {
+          notify("Transcription failed");
+        }
+
+        voiceCleanupUI();
+      };
+
+      voiceRecorder.start();
+      playListeningChime();
+      isListening = true;
+      voiceManualStop = false;
+      voiceTriggerStop = false;
+      document.getElementById('mic-btn').classList.add('listening');
+      document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'stop-circle');
+      lucide.createIcons();
+
+    } catch(e) {
+      notify("Microphone access denied");
+    }
+  })();
 }
 
 function escapeHtml(str) {
