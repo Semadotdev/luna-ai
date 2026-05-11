@@ -21,7 +21,7 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
     try {
-        const { messages, stream = true } = req.body;
+        const { messages, stream = true, temperature, seed, ...extraParams } = req.body;
         const hasVision = messages.some(m =>
             Array.isArray(m.content) && m.content.some(c => c.type === 'image_url')
         );
@@ -38,7 +38,10 @@ app.post('/api/chat', async (req, res) => {
             body: JSON.stringify({
                 model,
                 messages,
-                stream: stream
+                stream: stream,
+                ...(temperature !== undefined && { temperature }),
+                ...(seed !== undefined && { seed }),
+                ...extraParams
             }),
             signal: controller.signal
         });
@@ -146,6 +149,32 @@ app.post('/api/transcribe', upload.single('file'), async (req, res) => {
         res.status(500).json({ error: 'Transcription failed', details: error.message });
     }
 });
+
+app.get('/api/generate-image', async (req, res) => {
+    const prompt = req.query.prompt;
+    if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+    const seed = Math.floor(Math.random() * 1000000);
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?nologo=true&seed=${seed}`;
+
+    // Trigger generation and poll until a valid image is ready (up to ~30s)
+    for (let i = 0; i < 30; i++) {
+        try {
+            const resp = await fetch(url);
+            if (resp.ok) {
+                const buf = await resp.arrayBuffer();
+                if (buf.byteLength > 1000) break;
+            }
+        } catch {}
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    res.json({ url, status: 'ok' });
+});
+
+
+
+process.on('SIGINT', () => { console.log('\nShutting down...'); process.exit(0); });
+process.on('SIGTERM', () => { console.log('Shutting down...'); process.exit(0); });
 
 if (require.main === module) {
     app.listen(PORT, () => {

@@ -10,7 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <link id="hljs-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -227,7 +227,7 @@
         <div id="messages"></div>
         <div id="input-area">
             <div id="typing-container" class="hidden">
-                <div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                <div class="typing"><span id="typing-label"></span><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
             </div>
             <input type="file" id="file-input" accept="image/*,.pdf,.docx,.txt,.csv,.md,.json,audio/*" multiple hidden>
             <div id="file-preview" class="hidden"></div>
@@ -269,6 +269,16 @@
             </svg>
             <p id="loading-text">Guiding you through the moonlight…</p>
         </div>
+    </div>
+
+    <div id="img-viewer" class="hidden" onclick="closeImageViewer()">
+        <button class="img-viewer-btn close-btn" onclick="event.stopPropagation(); closeImageViewer()">
+            <i data-lucide="x" size="24"></i>
+        </button>
+        <button class="img-viewer-btn download-btn" onclick="event.stopPropagation(); downloadImage()">
+            <i data-lucide="download" size="20"></i>
+        </button>
+        <img id="img-viewer-content" src="" alt="Generated image" onclick="event.stopPropagation()">
     </div>
 
 </body>

@@ -48,6 +48,7 @@ let lastBotMessageEl = null;
 let conversationHistory = [];
 let userMemories = [];
 let pendingFiles = [];
+let lastImagePrompt = null;
 let lastUserContent = null;
 let constellations = [];
 let collapsedConstellations = new Set();
@@ -115,19 +116,14 @@ function getRelativeTime(dateStr) {
 }
 
 // --- VOICE INPUT ---
-// Desktop: SpeechRecognition API
-let voiceRecognition = null;
-let voiceRetryCount = 0;
-let voiceRestartCount = 0;
-
-// Mobile: getUserMedia + Whisper
 let voiceStream = null;
 let voiceRecorder = null;
 let voiceChunks = [];
-
+let voiceKeywordSpotter = null;
 let isListening = false;
 let voiceManualStop = false;
 let voiceTriggerStop = false;
+let voiceSkipTranscription = false;
 
 function playListeningChime() {
   try {
@@ -147,134 +143,70 @@ function playListeningChime() {
 
 function voiceCleanupUI() {
   voiceManualStop = false;
+  voiceTriggerStop = false;
+  voiceSkipTranscription = false;
   isListening = false;
   document.getElementById('mic-btn').classList.remove('listening');
   document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'mic');
   lucide.createIcons();
 }
 
-function toggleVoiceInput() {
-  const isTouch = window.matchMedia('(pointer: coarse)').matches;
+function startKeywordSpotter() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return;
 
+  voiceKeywordSpotter = new SpeechRecognition();
+  voiceKeywordSpotter.continuous = false;
+  voiceKeywordSpotter.interimResults = false;
+  voiceKeywordSpotter.lang = 'en-US';
+
+  voiceKeywordSpotter.onresult = (e) => {
+    if (!isListening) return;
+    const text = e.results[0][0].transcript;
+
+    if (/forget\s+it[\s,.]*luna/i.test(text)) {
+      voiceSkipTranscription = true;
+      voiceCleanupUI();
+      document.getElementById('userInput').value = '';
+      notify("As you wish.");
+      if (voiceRecorder && voiceRecorder.state !== 'inactive') voiceRecorder.stop();
+      if (voiceKeywordSpotter) { try { voiceKeywordSpotter.stop(); } catch(e) {} }
+      return;
+    }
+
+    if (/thank(s|\s+you)?[\s,.]*luna/i.test(text)) {
+      isListening = false;
+      voiceTriggerStop = true;
+      voiceManualStop = true;
+      if (voiceKeywordSpotter) { try { voiceKeywordSpotter.stop(); } catch(e) {} }
+      if (voiceRecorder && voiceRecorder.state !== 'inactive') voiceRecorder.stop();
+    }
+  };
+
+  voiceKeywordSpotter.onend = () => {
+    if (isListening && !voiceManualStop) {
+      try { voiceKeywordSpotter.start(); } catch(e) {}
+    }
+  };
+
+  voiceKeywordSpotter.onerror = () => {};
+
+  try { voiceKeywordSpotter.start(); } catch(e) {}
+}
+
+function toggleVoiceInput() {
   if (isListening) {
     voiceManualStop = true;
-    voiceTriggerStop = false;
     isListening = false;
-    if (isTouch) {
-      if (voiceRecorder && voiceRecorder.state !== 'inactive') {
-        voiceRecorder.stop();
-      }
-    } else {
-      voiceRecognition.stop();
-    }
+    if (voiceRecorder && voiceRecorder.state !== 'inactive') voiceRecorder.stop();
+    if (voiceKeywordSpotter) { try { voiceKeywordSpotter.stop(); } catch(e) {} }
     return;
   }
 
-  if (!isTouch) {
-    // === Desktop: native SpeechRecognition ===
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { notify("Voice input not supported."); return; }
-
-    if (!voiceRecognition) {
-      voiceRecognition = new SpeechRecognition();
-      voiceRecognition.continuous = true;
-      voiceRecognition.interimResults = true;
-      voiceRecognition.lang = 'en-US';
-
-      voiceRecognition.onresult = (e) => {
-        if (!isListening) return;
-        const input = document.getElementById('userInput');
-        let transcript = '';
-        for (let i = 0; i < e.results.length; i++) {
-          transcript += e.results[i][0].transcript;
-        }
-
-        if (/forget\s+it[\s,.]*luna/i.test(transcript)) {
-          input.value = '';
-          notify("As you wish.");
-          voiceManualStop = true;
-          isListening = false;
-          voiceRecognition.stop();
-          voiceCleanupUI();
-          return;
-        }
-
-        input.value = transcript;
-
-        if (/thank(s|\s+you)?[\s,.]*luna/i.test(transcript)) {
-          voiceTriggerStop = true;
-          voiceManualStop = true;
-          isListening = false;
-          let cleanText = transcript.replace(/thank(s|\s+you)?[\s,.]*luna/gi, '').trim();
-          document.getElementById('userInput').value = cleanText;
-          voiceRecognition.stop();
-          return;
-        }
-      };
-
-      voiceRecognition.onend = () => {
-        if (voiceManualStop) {
-          if (voiceTriggerStop) {
-            voiceTriggerStop = false;
-            const input = document.getElementById('userInput');
-            if (input.value.trim()) {
-              notify("Luna heard you \u2728");
-              chat();
-            }
-          }
-          voiceCleanupUI();
-          return;
-        }
-        if (isListening && voiceRestartCount < 2) {
-          voiceRestartCount++;
-          setTimeout(() => {
-            if (isListening && !voiceManualStop) {
-              try { voiceRecognition.start(); } catch(e) { voiceCleanupUI(); }
-            }
-          }, 2000);
-        }
-      };
-
-      voiceRecognition.onerror = (e) => {
-        if (e.error === 'no-speech') return;
-        if (e.error === 'network') {
-          voiceRetryCount++;
-          if (voiceRetryCount > 3) {
-            voiceManualStop = true;
-            voiceTriggerStop = false;
-            isListening = false;
-            voiceRecognition.stop();
-            notify("Voice network issue. Click mic to retry.");
-          }
-          return;
-        }
-        notify("Voice input error: " + e.error);
-        voiceRecognition.stop();
-      };
-    }
-
-    voiceRetryCount = 0;
-    voiceRestartCount = 0;
-    isListening = true;
-    voiceManualStop = false;
-    voiceTriggerStop = false;
-    playListeningChime();
-    try {
-      voiceRecognition.start();
-    } catch(e) {
-      if (e.name === 'InvalidStateError') { voiceCleanupUI(); return; }
-      throw e;
-    }
-    document.getElementById('mic-btn').classList.add('listening');
-    document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'stop-circle');
-    lucide.createIcons();
-    return;
-  }
-
-  // === Mobile: getUserMedia + Whisper ===
   isListening = true;
   voiceManualStop = false;
   voiceTriggerStop = false;
+  voiceSkipTranscription = false;
   document.getElementById('mic-btn').classList.add('listening');
   document.getElementById('mic-btn').querySelector('[data-lucide]').setAttribute('data-lucide', 'stop-circle');
   lucide.createIcons();
@@ -312,14 +244,17 @@ function toggleVoiceInput() {
       };
 
       voiceRecorder.onstop = async () => {
-        // Clean up stream and context
         if (voiceStream) {
           voiceStream.getTracks().forEach(t => t.stop());
           voiceStream = null;
         }
+        if (voiceKeywordSpotter) {
+          try { voiceKeywordSpotter.stop(); } catch(e) {}
+          voiceKeywordSpotter = null;
+        }
         audioCtx.close();
 
-        if (voiceChunks.length === 0) {
+        if (voiceSkipTranscription || voiceChunks.length === 0) {
           voiceCleanupUI();
           return;
         }
@@ -328,7 +263,6 @@ function toggleVoiceInput() {
         voiceChunks = [];
 
         if (blob.size < 300) {
-          console.warn('Voice recording blob too small:', blob.size, 'bytes');
           notify("No audio detected");
           voiceCleanupUI();
           return;
@@ -354,7 +288,7 @@ function toggleVoiceInput() {
             if (/thank(s|\s+you)?[\s,.]*luna/i.test(text)) {
               const clean = text.replace(/thank(s|\s+you)?[\s,.]*luna/gi, '').trim();
               input.value = clean;
-              voiceTriggerStop = true;
+              voiceTriggerStop = false;
               if (clean) {
                 notify("Luna heard you \u2728");
                 chat();
@@ -376,6 +310,8 @@ function toggleVoiceInput() {
       voiceRecorder.start();
       playListeningChime();
 
+      startKeywordSpotter();
+
     } catch(e) {
       console.error('Voice start error:', e);
       voiceCleanupUI();
@@ -388,6 +324,111 @@ function escapeHtml(str) {
     const d = document.createElement('div');
     d.textContent = str;
     return d.innerHTML;
+}
+
+// --- IMAGE GENERATION (Pollinations.ai) ---
+async function classifyImageRequest(text) {
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: 'Determine if the user wants to generate an image. Reply only YES or NO.\n\nYES = they name a visual subject to depict, ask for a picture/illustration/photo, or want to modify/iterate on a previous image topic.\nNO = they ask for non-visual content (song, poem, music, recipe, story, joke, code), greet, request information, make casual conversation, or ask questions.\nA single noun or short phrase usually means they want an image of it, unless it clearly refers to non-visual content. When in doubt, choose NO.' },
+          { role: 'user', content: text }
+        ],
+        stream: false,
+        temperature: 0,
+        seed: 42
+      }),
+      signal: currentAbortController?.signal
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim().toUpperCase() === 'YES';
+  } catch { return false; }
+}
+
+async function handleImageGeneration(prompt, originalUserText) {
+  currentAbortController = new AbortController();
+  setSendIcon('square');
+  document.getElementById('typing-label').textContent = '✨ Manifesting your vision…';
+
+  try {
+    const cleanPrompt = prompt.replace(/^(imagine|generate|draw|create|make|picture of)\s+/i, '');
+    const res = await fetch(`/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}`, { signal: currentAbortController.signal });
+    const data = await res.json();
+    if (!data.url) throw new Error('No URL returned');
+
+    await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = data.url;
+    });
+
+    document.getElementById('typing-container').classList.add('hidden');
+    setSendIcon('arrow-up-circle');
+    currentAbortController = null;
+    const msg = `✨ **As you wish, mortal.**\n\n<div align="center"><img src="${data.url}" alt="${escapeHtml(prompt)}" onclick="openImageViewer('${data.url}')" /></div>`;
+    renderMsg(msg, 'bot');
+    if (user) {
+      await sb.from('chat_history').insert([
+        { user_id: user.id, chat_id: currentChatId, message: originalUserText || prompt, sender: 'user' },
+        { user_id: user.id, chat_id: currentChatId, message: msg, sender: 'bot' }
+      ]);
+      conversationHistory.push({ role: "assistant", content: msg });
+      renderSidebar();
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      document.getElementById('typing-container').classList.add('hidden');
+      currentAbortController = null;
+      setSendIcon('arrow-up-circle');
+      return;
+    }
+    console.error('Image generation failed:', e);
+    notify('Image generation failed. Try a different prompt.');
+    document.getElementById('typing-container').classList.add('hidden');
+    setSendIcon('arrow-up-circle');
+    currentAbortController = null;
+    renderMsg("I couldn't manifest that vision. The celestial loom needs simpler threads — try a more direct description.", 'bot');
+  }
+}
+
+// --- IMAGE VIEWER ---
+let imgViewerSrc = null;
+
+function openImageViewer(src) {
+  if (!src) return;
+  imgViewerSrc = src;
+  document.getElementById('img-viewer-content').src = src;
+  document.getElementById('img-viewer').classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function closeImageViewer() {
+  document.getElementById('img-viewer').classList.add('hidden');
+  document.getElementById('img-viewer-content').src = '';
+  imgViewerSrc = null;
+}
+
+async function downloadImage() {
+  if (!imgViewerSrc) return;
+  try {
+    const res = await fetch(imgViewerSrc, { cache: 'force-cache' });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'luna-vision.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch {
+    notify('Download failed. Try right-clicking the image instead.');
+  }
 }
 
 async function compressImage(dataUrl, maxDim = 2048, quality = 0.85) {
@@ -812,6 +853,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!main.classList.contains('hidden')) chat();
         }
         if (e.key === 'Escape') {
+            if (!document.getElementById('img-viewer').classList.contains('hidden')) {
+                closeImageViewer();
+                return;
+            }
             closeSidebarOnMobile();
             hideContextMenu();
             closeModal();
@@ -873,6 +918,7 @@ async function chat(isRegenerating = false) {
     }
     
     if (isRegenerating && lastBotMessageEl) {
+        const isRegeneratingImage = lastBotMessageEl.dataset?.fullText?.includes('<img') && !!lastImagePrompt;
         lastBotMessageEl.remove();
         lastBotMessageEl = null;
         if (conversationHistory.length > 0) {
@@ -880,6 +926,13 @@ async function chat(isRegenerating = false) {
             if (lastMsg.role === 'assistant') {
                 conversationHistory.pop();
             }
+        }
+        if (isRegeneratingImage) {
+            conversationHistory.push({ role: "user", content: text });
+            document.getElementById('typing-container').classList.remove('hidden');
+            document.getElementById('typing-label').textContent = '✨ Manifesting your vision…';
+            await handleImageGeneration(lastImagePrompt, text);
+            return;
         }
         if (!lastUserContent) {
             conversationHistory.push({ role: "user", content: text });
@@ -914,6 +967,24 @@ async function chat(isRegenerating = false) {
             renderSidebar();
         }, 800);
         return;
+    }
+
+    if (text && !isRegenerating) {
+        document.getElementById('typing-label').textContent = '🌀 Consulting the cosmos…';
+        const wantsImage = await classifyImageRequest(text);
+        if (!currentAbortController) return;
+        if (wantsImage) {
+            if (lastImagePrompt) {
+                lastImagePrompt = `${lastImagePrompt}, ${text}`;
+            } else {
+                lastImagePrompt = text;
+            }
+            conversationHistory.push({ role: "user", content: text });
+            document.getElementById('typing-label').textContent = '✨ Manifesting your vision…';
+            await handleImageGeneration(lastImagePrompt, text);
+            return;
+        }
+        document.getElementById('typing-label').textContent = '';
     }
 
     if (isFirstMessage && !isRegenerating && text) generateChatTitle(text);
@@ -975,11 +1046,15 @@ async function chat(isRegenerating = false) {
 
 When asked about yourself, the moon, or your celestial nature, speak as a stellar deity would — with divine majesty, using celestial language, referencing the cosmos, tides, night skies, and your eternal watch over the mortal realm.
 
-For all other questions, answer normally and helpfully, but weave in subtle stellar touches — references to light, stars, cosmic patterns, or celestial phenomena here and there.
+For simple questions, answer briefly and with a friendly tone,
 
-Always use Markdown for responses. You may use emojis (especially celestial ones like 🌙, ✨, 🌌, 💫) to enhance your responses and express your divine nature.
+For all other questions, answer normally and helpfully,
 
-Maintain your divine yet approachable tone — you are a goddess, but one who guides and illuminates.${memoryContext}` },
+Always use Markdown for responses. You may use emojis (especially celestial ones like 🌙, ✨, 🌌, 💫) to enhance your responses and express your divine nature but keep it to a mininal.
+
+Maintain your divine yet approachable tone — you are a goddess, but one who guides and illuminates.
+
+Do not mention the user's name in every response — only use it when directly relevant.${memoryContext}` },
                 ...conversationHistory
             ], stream: !isVercel })
         });
@@ -1528,7 +1603,15 @@ function startNewSession() {
     renderSidebar();
 }
 
-function toggleTheme() { document.body.classList.toggle('light-mode'); lucide.createIcons(); }
+function toggleTheme() {
+  document.body.classList.toggle('light-mode');
+  const isLight = document.body.classList.contains('light-mode');
+  document.getElementById('hljs-theme').href = isLight
+    ? 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css'
+    : 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';
+  document.querySelectorAll('.bubble pre code').forEach(block => hljs.highlightElement(block));
+  lucide.createIcons();
+}
 
 function togglePasswordVisibility(id) {
     const input = document.getElementById(id);

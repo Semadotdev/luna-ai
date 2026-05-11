@@ -808,7 +808,46 @@ body.light-mode #drop-overlay {
 }
 .typing .dot:nth-child(2) { animation-delay: 0.2s; }
 .typing .dot:nth-child(3) { animation-delay: 0.4s; }
+#typing-label {
+  font-size: 12px; color: var(--text-muted);
+  font-family: 'Comfortaa', cursive;
+  margin-right: 4px;
+}
 @keyframes bounce-dot {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
   30% { transform: translateY(-7px); opacity: 1; }
 }
+
+/* --- IMAGE VIEWER --- */
+#img-viewer {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+#img-viewer.hidden { display: none; }
+#img-viewer-content {
+  max-width: 85vw; max-height: 85vh;
+  object-fit: contain; border-radius: 8px;
+  cursor: default;
+}
+.img-viewer-btn {
+  position: fixed; z-index: 10001;
+  background: rgba(255, 255, 255, 0.1);
+  border: none; color: #fff; cursor: pointer;
+  border-radius: 50%; width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s;
+}
+.img-viewer-btn:hover { background: rgba(255, 255, 255, 0.25); }
+.close-btn { top: 20px; right: 20px; }
+.download-btn { top: 20px; right: 70px; }
+
+/* --- CHAT IMAGE SIZING --- */
+.bubble img {
+  max-height: 280px; width: auto;
+  object-fit: contain; border-radius: 12px;
+  cursor: pointer; display: inline-block;
+}
+.bubble img:hover { opacity: 0.9; }
