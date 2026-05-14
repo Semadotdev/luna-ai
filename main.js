@@ -741,6 +741,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    document.getElementById('userInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            chat();
+        }
+    });
+
+    document.getElementById('userInput').addEventListener('input', () => {
+        const el = document.getElementById('userInput');
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+    });
+
     // Drag-and-drop
     let dragCounter = 0;
     const dropOverlay = document.getElementById('drop-overlay');
@@ -897,6 +910,7 @@ async function chat(isRegenerating = false) {
     if(!isRegenerating) {
         lastUserMessage = text;
         input.value = '';
+        input.style.height = 'auto';
         
         if (pendingFiles.length > 0) {
             const contentParts = [];
@@ -1051,6 +1065,7 @@ For simple questions, answer briefly and with a friendly tone,
 For all other questions, answer normally and helpfully,
 
 Always use Markdown for responses. You may use emojis (especially celestial ones like 🌙, ✨, 🌌, 💫) to enhance your responses and express your divine nature but keep it to a mininal.
+Always use correct grammar, proper punctuation, and complete sentences.
 
 Maintain your divine yet approachable tone — you are a goddess, but one who guides and illuminates.
 
@@ -1134,7 +1149,7 @@ Do not mention the user's name in every response — only use it when directly r
         const actionsEl = document.createElement('div');
         actionsEl.className = 'bot-actions';
         actionsEl.innerHTML = `
-            <button class="action-btn" onclick="copyText(this, this.closest('.msg-row').dataset.fullText)">
+            <button class="action-btn" onclick="copyText(this, this.closest('.msg-row'))">
                 <i data-lucide="copy" size="14"></i> Copy
             </button>
             <button class="action-btn" onclick="chat(true)">
@@ -1226,7 +1241,7 @@ function renderMsg(txt, sender, createdAt) {
     if (sender === 'bot') {
         div.dataset.fullText = txt;
         actions = `<div class="bot-actions">
-            <button class="action-btn" onclick="copyText(this, this.closest('.msg-row').dataset.fullText)">
+            <button class="action-btn" onclick="copyText(this, this.closest('.msg-row'))">
                 <i data-lucide="copy" size="14"></i> Copy
             </button>
             <button class="action-btn" onclick="chat(true)">
@@ -1245,9 +1260,11 @@ function renderMsg(txt, sender, createdAt) {
     lucide.createIcons();
 }
 
-function copyText(btn, text) {
+function copyText(btn, el) {
+    const bubble = el.querySelector('.bubble');
+    const text = bubble ? bubble.innerText : '';
     if (!text) {
-        console.error('copyText: No text provided');
+        console.error('copyText: No text found');
         return;
     }
     navigator.clipboard.writeText(text).then(() => {

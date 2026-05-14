@@ -235,6 +235,7 @@ body.light-mode .auth-card > [data-lucide]:first-child {
 #input-area { padding: 30px 18% 50px; }
 .input-wrapper { display: flex; align-items: center; background: var(--input-bg); border: 2px solid var(--border); border-radius: 20px; padding: 6px 8px 6px 4px; }
 input { flex: 1; border: none; background: transparent; color: var(--text-main); outline: none; font-size: 16px; font-family: 'Inter', sans-serif; }
+#userInput { flex: 1; border: none; background: transparent; color: var(--text-main); outline: none; font-size: 16px; font-family: 'Inter', sans-serif; resize: none; padding: 6px; line-height: 1.5; max-height: 150px; overflow-y: auto; }
 
 /* --- FILE PREVIEW --- */
 #file-preview {

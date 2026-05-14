@@ -238,7 +238,7 @@
                 <button id="mic-btn" onclick="toggleVoiceInput()" title="Voice input" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:6px 4px; display:flex; align-items:center;">
                     <i data-lucide="mic" size="20"></i>
                 </button>
-                <input type="text" id="userInput" placeholder="Illuminate a thought..." onkeypress="if(event.key==='Enter') chat()">
+                <textarea id="userInput" placeholder="Illuminate a thought..." rows="1"></textarea>
                 <button id="send-btn" onclick="handleSendBtn()" style="background:none; border:none; color:var(--primary); cursor:pointer;">
                     <i data-lucide="arrow-up-circle" size="24" fill="currentColor"></i>
                 </button>
