@@ -22,7 +22,8 @@ Modular static HTML app with Express backend proxy for API key security. Support
   - Marked (`marked` v4.3.0 — renders bot markdown responses)
   - highlight.js (syntax highlighting for code blocks)
   - Google Fonts: Poppins (body) + Comfortaa (headings/branding)
-- Backend: Supabase (auth + `chat_history` table) + Groq API (`llama-3.3-70b-versatile` with streaming via server proxy)
+- Backend: Supabase (auth + `chat_history` table) + Groq API (`openai/gpt-oss-120b` by default, override with `GROQ_MODEL`, streaming via server proxy)
+- **Images**: No vision model is currently available on the Groq account; `server.js` strips image parts and sends a text note instead
 
 ## Conventions
 - Edit `main.js` for chat/auth/UI logic; `styles.css` for styling; `server.js` for API proxy changes

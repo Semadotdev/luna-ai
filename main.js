@@ -1212,8 +1212,13 @@ async function generateChatTitle(userPrompt) {
                 { role: "user", content: userPrompt }
             ], stream: false })
         });
-        const data = await res.json();
-        const title = data.choices[0].message.content;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        const generatedTitle = (data?.choices?.[0]?.message?.content || '')
+            .trim()
+            .replace(/^["'`]+|["'`]+$/g, '');
+        const fallbackTitle = userPrompt.trim().split(/\s+/).slice(0, 2).join(' ');
+        const title = generatedTitle || fallbackTitle || 'New chat';
         await sb.from('chat_history').insert([{ user_id: user.id, chat_id: currentChatId, message: `🌙 ${title}`, sender: 'title' }]);
         hideLoading();
         renderSidebar();

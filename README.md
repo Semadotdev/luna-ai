@@ -155,7 +155,7 @@ That's it — you're all set!
 | Frontend | Static HTML + CSS + Vanilla JS |
 | Auth | Supabase Auth (email/password) |
 | Backend | Express proxy server |
-| AI | Groq API (`llama-3.3-70b-versatile`, streaming) |
+| AI | Groq API (`openai/gpt-oss-120b` by default, streaming; override with `GROQ_MODEL`) |
 | Styling | Poppins + Comfortaa (Google Fonts), Lucide icons |
 | Markdown | `marked` v4.3.0 + highlight.js |
 

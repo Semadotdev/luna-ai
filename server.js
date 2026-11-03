@@ -14,18 +14,46 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+const IMAGE_FALLBACK_NOTE = '[Image attached — image analysis is temporarily unavailable.]';
+
+function prepareMessages(messages) {
+    let strippedImages = false;
+    const prepared = messages.map((message) => {
+        if (!Array.isArray(message.content)) return message;
+        if (!message.content.some((part) => part.type === 'image_url')) return message;
+
+        strippedImages = true;
+        const parts = [];
+        let noteAdded = false;
+        for (const part of message.content) {
+            if (part.type === 'image_url') {
+                if (!noteAdded) {
+                    parts.push({ type: 'text', text: IMAGE_FALLBACK_NOTE });
+                    noteAdded = true;
+                }
+            } else if (part.type !== 'text' || part.text) {
+                parts.push(part);
+            }
+        }
+
+        return { ...message, content: parts.length ? parts : [{ type: 'text', text: IMAGE_FALLBACK_NOTE }] };
+    });
+
+    return { messages: prepared, strippedImages };
+}
 
 app.get('/api/health', (req, res) => {
-    res.json({ ok: true, groqKeySet: !!GROQ_KEY });
+    res.json({ ok: true, groqKeySet: !!GROQ_KEY, model: GROQ_MODEL });
 });
 
 app.post('/api/chat', async (req, res) => {
     try {
         const { messages, stream = true, temperature, seed, ...extraParams } = req.body;
-        const hasVision = messages.some(m =>
-            Array.isArray(m.content) && m.content.some(c => c.type === 'image_url')
-        );
-        const model = hasVision ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile';
+        const prepared = prepareMessages(messages);
+        if (prepared.strippedImages) {
+            console.warn('Image input ignored: no vision model is available on this Groq account.');
+        }
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
@@ -36,12 +64,12 @@ app.post('/api/chat', async (req, res) => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model,
-                messages,
+                ...extraParams,
+                model: GROQ_MODEL,
+                messages: prepared.messages,
                 stream: stream,
                 ...(temperature !== undefined && { temperature }),
-                ...(seed !== undefined && { seed }),
-                ...extraParams
+                ...(seed !== undefined && { seed })
             }),
             signal: controller.signal
         });
